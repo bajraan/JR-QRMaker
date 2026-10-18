@@ -1,27 +1,48 @@
 #include <iostream>
 #include <string>
-#include <vector>
+
+#include "SvgWriter.hpp"
 #include "qrcodegen.hpp"
-#include "SvgWriter.hpp" // Za chwilę dopniemy ten nagłówek, albo zrobimy bazową wersję zapisu
 
-int main() {
+namespace {
+
+void printUsage(const char* program) {
+    std::cerr << "Usage: " << program << " <url> [output.svg]\n"
+              << "  url         Text/URL encoded into the QR code\n"
+              << "  output.svg  Optional output path (default: qrcode.svg)\n";
+}
+
+}  // namespace
+
+int main(int argc, char* argv[]) {
+    if (argc < 2) {
+        printUsage(argv[0] != nullptr ? argv[0] : "JR-QRMaker");
+        return 1;
+    }
+
+    const std::string text = argv[1];
+    if (text.empty()) {
+        std::cerr << "[ERROR] URL/text argument must not be empty.\n";
+        printUsage(argv[0]);
+        return 1;
+    }
+
+    const std::string outputPath = (argc >= 3 && argv[2][0] != '\0')
+                                       ? argv[2]
+                                       : std::string("qrcode.svg");
+
     try {
-        // Dane do zakodowania w QR (np. link do Twojego GitHub / portfolio)
-        std::string text = "https://github.com/twoj-profil";
-        
-        // Wybór poziomu korekcji błędów (Medium)
-        qrcodegen::QrCode::Ecc errCorLev = qrcodegen::QrCode::Ecc::MEDIUM;
+        const qrcodegen::QrCode qr =
+            qrcodegen::QrCode::encodeText(text.c_str(), qrcodegen::QrCode::Ecc::MEDIUM);
 
-        // Generowanie kodu QR za pomocą silnika Nayukiego
-        qrcodegen::QrCode qr = qrcodegen::QrCode::encodeText(text.c_str(), errCorLev);
+        svggen::SvgWriter::writeFile(qr, outputPath);
 
-        std::cout << "[INFO] QR Code successfully generated!" << std::endl;
-        std::cout << "[INFO] QR Code Version: " << qr.getSize() << std::endl;
-
-        // Tutaj w kolejnym kroku podepniemy nasz moduł SvgWriter do eksportu do pliku .svg
-        
+        std::cout << "[INFO] Encoded: " << text << '\n'
+                  << "[INFO] QR size: " << qr.getSize() << " modules "
+                  << "(version " << qr.getVersion() << ")\n"
+                  << "[INFO] Wrote: " << outputPath << '\n';
     } catch (const std::exception& e) {
-        std::cerr << "[ERROR] Exception caught: " << e.what() << std::endl;
+        std::cerr << "[ERROR] " << e.what() << '\n';
         return 1;
     }
 
