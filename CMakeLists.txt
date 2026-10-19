@@ -18,6 +18,7 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 # Add internal modular subdirectories
 add_subdirectory(modules/qrcodegen)
 add_subdirectory(modules/svggen)
+add_subdirectory(modules/qrstyle)
 
 option(JR_QRMAKER_BUILD_GUI "Build the SFML GUI application" ON)
 if(JR_QRMAKER_BUILD_GUI)

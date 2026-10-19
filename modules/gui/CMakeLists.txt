@@ -67,7 +67,7 @@ target_include_directories(jr_gui
 target_link_libraries(jr_gui
     PUBLIC
         jr::qrcodegen
-        jr::svggen
+        jr::qrstyle
         ImGui-SFML::ImGui-SFML
 )
 

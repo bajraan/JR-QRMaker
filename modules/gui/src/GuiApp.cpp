@@ -1,5 +1,4 @@
 #include "GuiApp.hpp"
-#include "SvgWriter.hpp"
 
 #include <imgui.h>
 #include <imgui-SFML.h>
@@ -18,6 +17,27 @@ namespace {
 constexpr unsigned kWindowWidth = 960;
 constexpr unsigned kWindowHeight = 700;
 constexpr std::size_t kInputCapacity = 4096;
+
+enum class QrPart { Body, EyeFrame, EyeBall };
+
+QrPart classifyModule(int x, int y, int size) {
+    const int eyeLefts[] = {0, size - 7, 0};
+    const int eyeTops[] = {0, 0, size - 7};
+    for (int eye = 0; eye < 3; ++eye) {
+        const int localX = x - eyeLefts[eye];
+        const int localY = y - eyeTops[eye];
+        if (localX < 0 || localX >= 7 || localY < 0 || localY >= 7) {
+            continue;
+        }
+        if (localX == 0 || localX == 6 || localY == 0 || localY == 6) {
+            return QrPart::EyeFrame;
+        }
+        if (localX >= 2 && localX <= 4 && localY >= 2 && localY <= 4) {
+            return QrPart::EyeBall;
+        }
+    }
+    return QrPart::Body;
+}
 }
 
 GuiApp::GuiApp(std::string initialText)
@@ -91,6 +111,23 @@ void GuiApp::drawInterface() {
     ImGui::TextDisabled("The .svg extension is added automatically when omitted.");
     ImGui::Spacing();
 
+    ImGui::TextUnformatted("MODULE SHAPES");
+    const char* bodyShapes[] = {"Square", "Rounded", "Circles"};
+    int bodyShape = static_cast<int>(style_.bodystyle);
+    if (ImGui::Combo("Body", &bodyShape, bodyShapes, IM_ARRAYSIZE(bodyShapes))) {
+        style_.bodystyle = static_cast<qrstyle::QrStyle::body>(bodyShape);
+    }
+    const char* eyeShapes[] = {"Square", "Rounded", "Circle", "Circles"};
+    int frameShape = static_cast<int>(style_.eyeframestyle);
+    if (ImGui::Combo("Eye frame", &frameShape, eyeShapes, IM_ARRAYSIZE(eyeShapes))) {
+        style_.eyeframestyle = static_cast<qrstyle::QrStyle::eyeframe>(frameShape);
+    }
+    int ballShape = static_cast<int>(style_.eyeballstyle);
+    if (ImGui::Combo("Eye center", &ballShape, eyeShapes, IM_ARRAYSIZE(eyeShapes))) {
+        style_.eyeballstyle = static_cast<qrstyle::QrStyle::eyeball>(ballShape);
+    }
+    ImGui::Spacing();
+
     if (ImGui::Button("Paste from clipboard", ImVec2(170.f, 34.f))) {
         const char* clipboard = ImGui::GetClipboardText();
         text_ = clipboard != nullptr ? clipboard : "";
@@ -126,12 +163,82 @@ void GuiApp::drawInterface() {
         const float qrSize = module * static_cast<float>(count);
         const float left = origin.x + (size.x - qrSize) * 0.5f;
         const float top = origin.y + (size.y - qrSize) * 0.5f;
+        const ImU32 ink = IM_COL32(20, 27, 39, 255);
+        const auto drawTile = [&](int x, int y, auto shape) {
+            const ImVec2 p0(left + x * module, top + y * module);
+            const ImVec2 p1(p0.x + module + 0.15f, p0.y + module + 0.15f);
+            if (shape == decltype(shape)::CIRCLES) {
+                drawList->AddCircleFilled(ImVec2(p0.x + module * 0.5f, p0.y + module * 0.5f), module * 0.48f, ink);
+            } else if (shape == decltype(shape)::ROUNDED) {
+                drawList->AddRectFilled(p0, p1, ink, module * qrstyle::QrStyle::kDefaultCornerRadius);
+            } else {
+                drawList->AddRectFilled(p0, p1, ink);
+            }
+        };
+        const auto drawRoundedPart = [&](QrPart part) {
+            for (int y = 0; y < count; ++y) {
+                for (int x = 0; x < count; ++x) {
+                    if (!qr_->getModule(x, y) || classifyModule(x, y, count) != part) {
+                        continue;
+                    }
+                    const float tileX = left + x * module;
+                    const float tileY = top + y * module;
+                    drawList->AddCircleFilled(ImVec2(tileX + module * 0.5f, tileY + module * 0.5f), module * 0.5f, ink);
+                    if (x + 1 < count && qr_->getModule(x + 1, y) && classifyModule(x + 1, y, count) == part) {
+                        drawList->AddRectFilled(ImVec2(tileX + module * 0.5f, tileY),
+                                                ImVec2(tileX + module * 1.5f, tileY + module), ink);
+                    }
+                    if (y + 1 < count && qr_->getModule(x, y + 1) && classifyModule(x, y + 1, count) == part) {
+                        drawList->AddRectFilled(ImVec2(tileX, tileY + module * 0.5f),
+                                                ImVec2(tileX + module, tileY + module * 1.5f), ink);
+                    }
+                }
+            }
+        };
+        if (style_.bodystyle == qrstyle::QrStyle::body::ROUNDED) {
+            drawRoundedPart(QrPart::Body);
+        } else {
         for (int y = 0; y < count; ++y) {
             for (int x = 0; x < count; ++x) {
-                if (qr_->getModule(x, y)) {
-                    const ImVec2 p0(left + x * module, top + y * module);
-                    drawList->AddRectFilled(p0, ImVec2(p0.x + module + 0.15f, p0.y + module + 0.15f),
-                                            IM_COL32(15, 19, 27, 255));
+                if (qr_->getModule(x, y) && classifyModule(x, y, count) == QrPart::Body) {
+                    drawTile(x, y, style_.bodystyle);
+                }
+            }
+        }
+        }
+        if (style_.eyeframestyle == qrstyle::QrStyle::eyeframe::CIRCLE) {
+            const ImVec2 centers[] = {{left + module * 3.5f, top + module * 3.5f},
+                                      {left + module * (count - 3.5f), top + module * 3.5f},
+                                      {left + module * 3.5f, top + module * (count - 3.5f)}};
+            for (const ImVec2 center : centers) {
+                drawList->AddCircle(center, module * 3.f, ink, 0, module * 0.9f);
+            }
+        } else if (style_.eyeframestyle == qrstyle::QrStyle::eyeframe::ROUNDED) {
+            drawRoundedPart(QrPart::EyeFrame);
+        } else {
+            for (int y = 0; y < count; ++y) {
+                for (int x = 0; x < count; ++x) {
+                    if (qr_->getModule(x, y) && classifyModule(x, y, count) == QrPart::EyeFrame) {
+                        drawTile(x, y, style_.eyeframestyle);
+                    }
+                }
+            }
+        }
+        if (style_.eyeballstyle == qrstyle::QrStyle::eyeball::CIRCLE) {
+            const ImVec2 centers[] = {{left + module * 3.5f, top + module * 3.5f},
+                                      {left + module * (count - 3.5f), top + module * 3.5f},
+                                      {left + module * 3.5f, top + module * (count - 3.5f)}};
+            for (const ImVec2 center : centers) {
+                drawList->AddCircleFilled(center, module * 1.5f, ink);
+            }
+        } else if (style_.eyeballstyle == qrstyle::QrStyle::eyeball::ROUNDED) {
+            drawRoundedPart(QrPart::EyeBall);
+        } else {
+            for (int y = 0; y < count; ++y) {
+                for (int x = 0; x < count; ++x) {
+                    if (qr_->getModule(x, y) && classifyModule(x, y, count) == QrPart::EyeBall) {
+                        drawTile(x, y, style_.eyeballstyle);
+                    }
                 }
             }
         }
@@ -160,7 +267,7 @@ void GuiApp::generate() {
         if (path.extension().empty()) {
             path += ".svg";
         }
-        svggen::SvgWriter::writeFile(qr, path.string());
+        qrstyle::QrStyle::writeFile(qr, path.string(), style_, colors_);
         qr_ = qr;
         status_ = "Saved SVG: " + std::filesystem::absolute(path).string();
     } catch (const std::exception& ex) {

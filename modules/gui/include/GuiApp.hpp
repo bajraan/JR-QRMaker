@@ -1,6 +1,7 @@
 #pragma once
 
 #include "qrcodegen.hpp"
+#include "QrStyle.hpp"
 
 #include <SFML/Graphics/RenderWindow.hpp>
 
@@ -22,6 +23,8 @@ private:
     std::string text_;
     std::string outputText_{"qrcode.svg"};
     std::string status_{"Enter text or a link to create a QR code."};
+    qrstyle::QrStyle::StyleShape style_{};
+    qrstyle::QrStyle::StyleColor colors_{};
     std::optional<qrcodegen::QrCode> qr_;
     sf::RenderWindow window_;
 };
