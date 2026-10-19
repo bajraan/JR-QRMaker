@@ -29,8 +29,8 @@ public:
         std::string eyeball;
         std::string eyeframe;
 
-        StyleColor(std::string backgroundColor = "FFFFFF", std::string bodyColor = "141B27",
-                   std::string eyeBallColor = "141B27", std::string eyeFrameColor = "141B27")
+        StyleColor(std::string backgroundColor = "FFFFFF", std::string bodyColor = "D35400",
+                   std::string eyeBallColor = "D35400", std::string eyeFrameColor = "D35400")
             : background(std::move(backgroundColor)), body(std::move(bodyColor)),
               eyeball(std::move(eyeBallColor)), eyeframe(std::move(eyeFrameColor)) {}
     };

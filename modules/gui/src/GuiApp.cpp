@@ -7,7 +7,9 @@
 #include <SFML/System/Time.hpp>
 
 #include <algorithm>
+#include <array>
 #include <chrono>
+#include <cstdio>
 #include <cstring>
 #include <exception>
 #include <filesystem>
@@ -37,6 +39,27 @@ QrPart classifyModule(int x, int y, int size) {
         }
     }
     return QrPart::Body;
+}
+
+std::array<float, 3> toColorEdit(const std::string& hex) {
+    const std::string digits = hex.size() == 7 && hex.front() == '#' ? hex.substr(1) : hex;
+    const unsigned long value = std::stoul(digits, nullptr, 16);
+    return {static_cast<float>((value >> 16) & 0xFF) / 255.f,
+            static_cast<float>((value >> 8) & 0xFF) / 255.f,
+            static_cast<float>(value & 0xFF) / 255.f};
+}
+
+std::string fromColorEdit(const std::array<float, 3>& color) {
+    char hex[7]{};
+    const auto channel = [](float value) { return static_cast<unsigned>(std::clamp(value, 0.f, 1.f) * 255.f + 0.5f); };
+    std::snprintf(hex, sizeof(hex), "%02X%02X%02X", channel(color[0]), channel(color[1]), channel(color[2]));
+    return hex;
+}
+
+ImU32 toImGuiColor(const std::string& hex) {
+    const auto color = toColorEdit(hex);
+    return IM_COL32(static_cast<int>(color[0] * 255.f + 0.5f), static_cast<int>(color[1] * 255.f + 0.5f),
+                    static_cast<int>(color[2] * 255.f + 0.5f), 255);
 }
 }
 
@@ -124,20 +147,59 @@ void GuiApp::drawInterface() {
     ImGui::TextDisabled("The .svg extension is added automatically when omitted.");
     ImGui::Spacing();
 
-    ImGui::TextUnformatted("MODULE SHAPES");
-    const char* bodyShapes[] = {"Square", "Rounded", "Circles"};
-    int bodyShape = static_cast<int>(style_.bodystyle);
-    if (ImGui::Combo("Body", &bodyShape, bodyShapes, IM_ARRAYSIZE(bodyShapes))) {
-        style_.bodystyle = static_cast<qrstyle::QrStyle::body>(bodyShape);
-    }
-    const char* eyeShapes[] = {"Square", "Rounded", "Circle", "Circles"};
-    int frameShape = static_cast<int>(style_.eyeframestyle);
-    if (ImGui::Combo("Eye frame", &frameShape, eyeShapes, IM_ARRAYSIZE(eyeShapes))) {
-        style_.eyeframestyle = static_cast<qrstyle::QrStyle::eyeframe>(frameShape);
-    }
-    int ballShape = static_cast<int>(style_.eyeballstyle);
-    if (ImGui::Combo("Eye center", &ballShape, eyeShapes, IM_ARRAYSIZE(eyeShapes))) {
-        style_.eyeballstyle = static_cast<qrstyle::QrStyle::eyeball>(ballShape);
+    if (ImGui::BeginTable("##style-color-layout", 2, ImGuiTableFlags_SizingStretchProp)) {
+        ImGui::TableSetupColumn("Shapes", ImGuiTableColumnFlags_WidthStretch, 1.05f);
+        ImGui::TableSetupColumn("Colors", ImGuiTableColumnFlags_WidthStretch, 0.95f);
+        ImGui::TableNextRow();
+        ImGui::TableSetColumnIndex(0);
+        ImGui::TextUnformatted("MODULE SHAPES");
+        const char* bodyShapes[] = {"Square", "Rounded", "Circles"};
+        int bodyShape = static_cast<int>(style_.bodystyle);
+        ImGui::SetNextItemWidth(120.f);
+        if (ImGui::Combo("Body", &bodyShape, bodyShapes, IM_ARRAYSIZE(bodyShapes))) {
+            style_.bodystyle = static_cast<qrstyle::QrStyle::body>(bodyShape);
+        }
+        const char* eyeShapes[] = {"Square", "Rounded", "Circle", "Circles"};
+        int frameShape = static_cast<int>(style_.eyeframestyle);
+        ImGui::SetNextItemWidth(120.f);
+        if (ImGui::Combo("Eye frame", &frameShape, eyeShapes, IM_ARRAYSIZE(eyeShapes))) {
+            style_.eyeframestyle = static_cast<qrstyle::QrStyle::eyeframe>(frameShape);
+        }
+        int ballShape = static_cast<int>(style_.eyeballstyle);
+        ImGui::SetNextItemWidth(120.f);
+        if (ImGui::Combo("Eye center", &ballShape, eyeShapes, IM_ARRAYSIZE(eyeShapes))) {
+            style_.eyeballstyle = static_cast<qrstyle::QrStyle::eyeball>(ballShape);
+        }
+
+        ImGui::TableSetColumnIndex(1);
+        ImGui::TextUnformatted("REGION COLORS");
+        auto bodyColor = toColorEdit(colors_.body);
+        ImGui::SetNextItemWidth(112.f);
+        if (ImGui::ColorEdit3("##body-color", bodyColor.data(),
+                              ImGuiColorEditFlags_DisplayHex | ImGuiColorEditFlags_NoLabel)) {
+            colors_.body = fromColorEdit(bodyColor);
+        }
+        auto frameColor = toColorEdit(colors_.eyeframe);
+        ImGui::SetNextItemWidth(112.f);
+        if (ImGui::ColorEdit3("##eye-frame-color", frameColor.data(),
+                              ImGuiColorEditFlags_DisplayHex | ImGuiColorEditFlags_NoLabel)) {
+            colors_.eyeframe = fromColorEdit(frameColor);
+        }
+        auto ballColor = toColorEdit(colors_.eyeball);
+        ImGui::SetNextItemWidth(112.f);
+        if (ImGui::ColorEdit3("##eye-center-color", ballColor.data(),
+                              ImGuiColorEditFlags_DisplayHex | ImGuiColorEditFlags_NoLabel)) {
+            colors_.eyeball = fromColorEdit(ballColor);
+        }
+        auto backgroundColor = toColorEdit(colors_.background);
+        ImGui::SetNextItemWidth(112.f);
+        if (ImGui::ColorEdit3("##background-color", backgroundColor.data(),
+                              ImGuiColorEditFlags_DisplayHex | ImGuiColorEditFlags_NoLabel)) {
+            colors_.background = fromColorEdit(backgroundColor);
+        }
+        ImGui::SameLine();
+        ImGui::TextUnformatted("background");
+        ImGui::EndTable();
     }
     ImGui::Spacing();
 
@@ -170,15 +232,17 @@ void GuiApp::drawInterface() {
     const ImVec2 origin = ImGui::GetCursorScreenPos();
     const ImVec2 size = ImGui::GetContentRegionAvail();
     ImDrawList* drawList = ImGui::GetWindowDrawList();
-    drawList->AddRectFilled(origin, ImVec2(origin.x + size.x, origin.y + size.y), IM_COL32(255, 255, 255, 255));
+    drawList->AddRectFilled(origin, ImVec2(origin.x + size.x, origin.y + size.y), toImGuiColor(colors_.background));
     if (qr_) {
         const int count = qr_->getSize();
         const float module = std::max(1.f, std::min(size.x - 32.f, size.y - 32.f) / static_cast<float>(count));
         const float qrSize = module * static_cast<float>(count);
         const float left = origin.x + (size.x - qrSize) * 0.5f;
         const float top = origin.y + (size.y - qrSize) * 0.5f;
-        const ImU32 ink = IM_COL32(20, 27, 39, 255);
-        const auto drawTile = [&](int x, int y, auto shape) {
+        const ImU32 bodyInk = toImGuiColor(colors_.body);
+        const ImU32 frameInk = toImGuiColor(colors_.eyeframe);
+        const ImU32 ballInk = toImGuiColor(colors_.eyeball);
+        const auto drawTile = [&](int x, int y, auto shape, ImU32 ink) {
             const ImVec2 p0(left + x * module, top + y * module);
             const ImVec2 p1(p0.x + module + 0.15f, p0.y + module + 0.15f);
             if (shape == decltype(shape)::CIRCLES) {
@@ -189,7 +253,7 @@ void GuiApp::drawInterface() {
                 drawList->AddRectFilled(p0, p1, ink);
             }
         };
-        const auto drawRoundedPart = [&](QrPart part) {
+        const auto drawRoundedPart = [&](QrPart part, ImU32 ink) {
             for (int y = 0; y < count; ++y) {
                 for (int x = 0; x < count; ++x) {
                     if (!qr_->getModule(x, y) || classifyModule(x, y, count) != part) {
@@ -210,12 +274,12 @@ void GuiApp::drawInterface() {
             }
         };
         if (style_.bodystyle == qrstyle::QrStyle::body::ROUNDED) {
-            drawRoundedPart(QrPart::Body);
+            drawRoundedPart(QrPart::Body, bodyInk);
         } else {
             for (int y = 0; y < count; ++y) {
                 for (int x = 0; x < count; ++x) {
                     if (qr_->getModule(x, y) && classifyModule(x, y, count) == QrPart::Body) {
-                        drawTile(x, y, style_.bodystyle);
+                        drawTile(x, y, style_.bodystyle, bodyInk);
                     }
                 }
             }
@@ -225,15 +289,15 @@ void GuiApp::drawInterface() {
                                       {left + module * (count - 3.5f), top + module * 3.5f},
                                       {left + module * 3.5f, top + module * (count - 3.5f)}};
             for (const ImVec2 center : centers) {
-                drawList->AddCircle(center, module * 3.f, ink, 0, module * 0.9f);
+                drawList->AddCircle(center, module * 3.f, frameInk, 0, module * 0.9f);
             }
         } else if (style_.eyeframestyle == qrstyle::QrStyle::eyeframe::ROUNDED) {
-            drawRoundedPart(QrPart::EyeFrame);
+            drawRoundedPart(QrPart::EyeFrame, frameInk);
         } else {
             for (int y = 0; y < count; ++y) {
                 for (int x = 0; x < count; ++x) {
                     if (qr_->getModule(x, y) && classifyModule(x, y, count) == QrPart::EyeFrame) {
-                        drawTile(x, y, style_.eyeframestyle);
+                        drawTile(x, y, style_.eyeframestyle, frameInk);
                     }
                 }
             }
@@ -243,15 +307,15 @@ void GuiApp::drawInterface() {
                                       {left + module * (count - 3.5f), top + module * 3.5f},
                                       {left + module * 3.5f, top + module * (count - 3.5f)}};
             for (const ImVec2 center : centers) {
-                drawList->AddCircleFilled(center, module * 1.5f, ink);
+                drawList->AddCircleFilled(center, module * 1.5f, ballInk);
             }
         } else if (style_.eyeballstyle == qrstyle::QrStyle::eyeball::ROUNDED) {
-            drawRoundedPart(QrPart::EyeBall);
+            drawRoundedPart(QrPart::EyeBall, ballInk);
         } else {
             for (int y = 0; y < count; ++y) {
                 for (int x = 0; x < count; ++x) {
                     if (qr_->getModule(x, y) && classifyModule(x, y, count) == QrPart::EyeBall) {
-                        drawTile(x, y, style_.eyeballstyle);
+                        drawTile(x, y, style_.eyeballstyle, ballInk);
                     }
                 }
             }
