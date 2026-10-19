@@ -25,6 +25,33 @@ if(NOT TARGET SFML::Graphics)
     FetchContent_MakeAvailable(SFML)
 endif()
 
+# ImGui-SFML supplies Dear ImGui and the SFML event/rendering backend.
+set(IMGUI_SFML_FIND_SFML OFF CACHE BOOL "Use the SFML target already configured above" FORCE)
+set(IMGUI_SFML_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+set(IMGUI_SFML_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+FetchContent_Declare(
+    DearImGui
+    GIT_REPOSITORY https://github.com/ocornut/imgui.git
+    GIT_TAG v1.91.8
+    GIT_SHALLOW ON
+    EXCLUDE_FROM_ALL
+    SYSTEM
+)
+FetchContent_GetProperties(DearImGui)
+if(NOT dearimgui_POPULATED)
+    FetchContent_Populate(DearImGui)
+endif()
+set(IMGUI_DIR "${dearimgui_SOURCE_DIR}" CACHE PATH "Dear ImGui source directory" FORCE)
+FetchContent_Declare(
+    ImGui-SFML
+    GIT_REPOSITORY https://github.com/SFML/imgui-sfml.git
+    GIT_TAG v3.0
+    GIT_SHALLOW ON
+    EXCLUDE_FROM_ALL
+    SYSTEM
+)
+FetchContent_MakeAvailable(ImGui-SFML)
+
 add_library(jr_gui STATIC
     src/GuiApp.cpp
 )
@@ -41,7 +68,7 @@ target_link_libraries(jr_gui
     PUBLIC
         jr::qrcodegen
         jr::svggen
-        SFML::Graphics
+        ImGui-SFML::ImGui-SFML
 )
 
 target_compile_features(jr_gui PUBLIC cxx_std_20)
