@@ -14,8 +14,8 @@
 
 namespace gui {
 namespace {
-constexpr unsigned kWindowWidth = 960;
-constexpr unsigned kWindowHeight = 700;
+constexpr unsigned kWindowWidth = 1420;
+constexpr unsigned kWindowHeight = 800;
 constexpr std::size_t kInputCapacity = 4096;
 
 enum class QrPart { Body, EyeFrame, EyeBall };
@@ -91,6 +91,19 @@ void GuiApp::drawInterface() {
     ImGui::Separator();
     ImGui::Spacing();
 
+    constexpr float kSettingsWidth = 390.f;
+    if (!ImGui::BeginTable("##editor-layout", 2,
+                           ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_SizingStretchProp,
+                           ImVec2(-1.f, -1.f))) {
+        ImGui::PopStyleColor();
+        ImGui::End();
+        return;
+    }
+    ImGui::TableSetupColumn("Settings", ImGuiTableColumnFlags_WidthFixed, kSettingsWidth);
+    ImGui::TableSetupColumn("QR preview", ImGuiTableColumnFlags_WidthStretch);
+    ImGui::TableNextRow();
+
+    ImGui::TableSetColumnIndex(0);
     ImGui::TextUnformatted("CONTENT");
     ImGui::SetNextItemWidth(-1.f);
     text_.resize(kInputCapacity, '\0');
@@ -141,8 +154,11 @@ void GuiApp::drawInterface() {
 
     ImGui::Spacing();
     ImGui::Separator();
-    ImGui::Spacing();
-    ImGui::TextUnformatted("PREVIEW");
+    ImGui::TextUnformatted("STATUS");
+    ImGui::TextWrapped("%s", status_.c_str());
+
+    ImGui::TableSetColumnIndex(1);
+    ImGui::TextUnformatted("QR PREVIEW");
     ImGui::SameLine();
     if (qr_) {
         ImGui::TextDisabled("%d × %d modules", qr_->getSize(), qr_->getSize());
@@ -150,9 +166,7 @@ void GuiApp::drawInterface() {
         ImGui::TextDisabled("Enter content to see a preview");
     }
 
-    const ImVec2 available = ImGui::GetContentRegionAvail();
-    const float previewHeight = std::max(160.f, available.y - 76.f);
-    ImGui::BeginChild("##preview", ImVec2(-1.f, previewHeight), ImGuiChildFlags_Borders);
+    ImGui::BeginChild("##preview", ImVec2(-1.f, -1.f), ImGuiChildFlags_Borders);
     const ImVec2 origin = ImGui::GetCursorScreenPos();
     const ImVec2 size = ImGui::GetContentRegionAvail();
     ImDrawList* drawList = ImGui::GetWindowDrawList();
@@ -198,13 +212,13 @@ void GuiApp::drawInterface() {
         if (style_.bodystyle == qrstyle::QrStyle::body::ROUNDED) {
             drawRoundedPart(QrPart::Body);
         } else {
-        for (int y = 0; y < count; ++y) {
-            for (int x = 0; x < count; ++x) {
-                if (qr_->getModule(x, y) && classifyModule(x, y, count) == QrPart::Body) {
-                    drawTile(x, y, style_.bodystyle);
+            for (int y = 0; y < count; ++y) {
+                for (int x = 0; x < count; ++x) {
+                    if (qr_->getModule(x, y) && classifyModule(x, y, count) == QrPart::Body) {
+                        drawTile(x, y, style_.bodystyle);
+                    }
                 }
             }
-        }
         }
         if (style_.eyeframestyle == qrstyle::QrStyle::eyeframe::CIRCLE) {
             const ImVec2 centers[] = {{left + module * 3.5f, top + module * 3.5f},
@@ -245,8 +259,7 @@ void GuiApp::drawInterface() {
     }
     ImGui::EndChild();
 
-    ImGui::Spacing();
-    ImGui::TextWrapped("%s", status_.c_str());
+    ImGui::EndTable();
     ImGui::PopStyleColor();
     ImGui::End();
 }
