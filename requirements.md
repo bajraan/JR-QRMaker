@@ -18,6 +18,10 @@ A simple desktop app that turns text or a link into a QR code SVG file.
 - [x] **REQ-010 — Edit QR content:** The QR content field is editable, including insertion at the cursor position.
 - [x] **REQ-011 — Save SVG file:** Generating the QR code saves it as an SVG file using the name in the output file name field and shows where it was saved.
 
+## issue
+
+- [ ] **ticket-001** — too long text crasing aplication.
+
 ## How to check
 
 1. Copy a link or text to the clipboard and open the app.

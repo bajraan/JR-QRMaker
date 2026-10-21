@@ -41,25 +41,26 @@ QrPart classifyModule(int x, int y, int size) {
     return QrPart::Body;
 }
 
-std::array<float, 3> toColorEdit(const std::string& hex) {
+std::array<float, 4> toColorEdit(const std::string& hex, float alpha) {
     const std::string digits = hex.size() == 7 && hex.front() == '#' ? hex.substr(1) : hex;
     const unsigned long value = std::stoul(digits, nullptr, 16);
     return {static_cast<float>((value >> 16) & 0xFF) / 255.f,
             static_cast<float>((value >> 8) & 0xFF) / 255.f,
-            static_cast<float>(value & 0xFF) / 255.f};
+            static_cast<float>(value & 0xFF) / 255.f, alpha};
 }
 
-std::string fromColorEdit(const std::array<float, 3>& color) {
+std::string fromColorEdit(const std::array<float, 4>& color, float& alpha) {
     char hex[7]{};
     const auto channel = [](float value) { return static_cast<unsigned>(std::clamp(value, 0.f, 1.f) * 255.f + 0.5f); };
     std::snprintf(hex, sizeof(hex), "%02X%02X%02X", channel(color[0]), channel(color[1]), channel(color[2]));
+    alpha = std::clamp(color[3], 0.f, 1.f);
     return hex;
 }
 
-ImU32 toImGuiColor(const std::string& hex) {
-    const auto color = toColorEdit(hex);
+ImU32 toImGuiColor(const std::string& hex, float alpha = 1.f) {
+    const auto color = toColorEdit(hex, alpha);
     return IM_COL32(static_cast<int>(color[0] * 255.f + 0.5f), static_cast<int>(color[1] * 255.f + 0.5f),
-                    static_cast<int>(color[2] * 255.f + 0.5f), 255);
+                    static_cast<int>(color[2] * 255.f + 0.5f), static_cast<int>(color[3] * 255.f + 0.5f));
 }
 }
 
@@ -114,6 +115,50 @@ void GuiApp::drawInterface() {
     ImGui::Separator();
     ImGui::Spacing();
 
+    if (ImGui::BeginTable("##source-fields", 2, ImGuiTableFlags_BordersInnerH, ImVec2(-1.f, 0.f))) {
+        ImGui::TableSetupColumn("Actions", ImGuiTableColumnFlags_WidthFixed, 92.f);
+        ImGui::TableSetupColumn("Input fields", ImGuiTableColumnFlags_WidthStretch);
+        ImGui::TableNextRow();
+        ImGui::TableSetColumnIndex(0);
+        if (ImGui::Button("Paste", ImVec2(-1.f, 34.f))) {
+            const char* clipboard = ImGui::GetClipboardText();
+            text_ = clipboard != nullptr ? clipboard : "";
+            rebuildPreview();
+            status_ = text_.empty() ? "Clipboard is empty." : "Text pasted from clipboard.";
+        }
+        ImGui::TableSetColumnIndex(1);
+        ImGui::TextUnformatted("CONTENT");
+        ImGui::SameLine();
+        ImGui::TextDisabled("Paste a URL or any text you want to encode.");
+        ImGui::SetNextItemWidth(-1.f);
+        text_.resize(kInputCapacity, '\0');
+        const bool contentEdited = ImGui::InputText("##content", text_.data(), text_.size(),
+                                                    ImGuiInputTextFlags_EnterReturnsTrue);
+        text_.resize(std::strlen(text_.c_str()));
+        if (contentEdited || ImGui::IsItemEdited()) {
+            rebuildPreview();
+        }
+        ImGui::SetItemDefaultFocus();
+
+        ImGui::TableNextRow();
+        ImGui::TableSetColumnIndex(0);
+        if (ImGui::Button("Generate", ImVec2(-1.f, 34.f)) || ImGui::IsKeyPressed(ImGuiKey_Enter)) {
+            generate();
+        }
+        ImGui::TableSetColumnIndex(1);
+        ImGui::TextUnformatted("OUTPUT FILE");
+        ImGui::SameLine();
+        ImGui::TextDisabled("The .svg extension is added automatically when omitted.");
+        ImGui::SetNextItemWidth(-1.f);
+        outputText_.resize(512, '\0');
+        ImGui::InputText("##output", outputText_.data(), outputText_.size());
+        outputText_.resize(std::strlen(outputText_.c_str()));
+        ImGui::EndTable();
+    }
+    ImGui::Spacing();
+    ImGui::Separator();
+    ImGui::Spacing();
+
     constexpr float kSettingsWidth = 390.f;
     if (!ImGui::BeginTable("##editor-layout", 2,
                            ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_SizingStretchProp,
@@ -127,26 +172,6 @@ void GuiApp::drawInterface() {
     ImGui::TableNextRow();
 
     ImGui::TableSetColumnIndex(0);
-    ImGui::TextUnformatted("CONTENT");
-    ImGui::SetNextItemWidth(-1.f);
-    text_.resize(kInputCapacity, '\0');
-    const bool contentEdited = ImGui::InputText("##content", text_.data(), text_.size(), ImGuiInputTextFlags_EnterReturnsTrue);
-    text_.resize(std::strlen(text_.c_str()));
-    if (contentEdited || ImGui::IsItemEdited()) {
-        rebuildPreview();
-    }
-    ImGui::SetItemDefaultFocus();
-    ImGui::TextDisabled("Paste a URL or any text you want to encode.");
-    ImGui::Spacing();
-
-    ImGui::TextUnformatted("OUTPUT FILE");
-    ImGui::SetNextItemWidth(-1.f);
-    outputText_.resize(512, '\0');
-    ImGui::InputText("##output", outputText_.data(), outputText_.size());
-    outputText_.resize(std::strlen(outputText_.c_str()));
-    ImGui::TextDisabled("The .svg extension is added automatically when omitted.");
-    ImGui::Spacing();
-
     if (ImGui::BeginTable("##style-color-layout", 2, ImGuiTableFlags_SizingStretchProp)) {
         ImGui::TableSetupColumn("Shapes", ImGuiTableColumnFlags_WidthStretch, 1.05f);
         ImGui::TableSetupColumn("Colors", ImGuiTableColumnFlags_WidthStretch, 0.95f);
@@ -173,46 +198,35 @@ void GuiApp::drawInterface() {
 
         ImGui::TableSetColumnIndex(1);
         ImGui::TextUnformatted("REGION COLORS");
-        auto bodyColor = toColorEdit(colors_.body);
+        auto bodyColor = toColorEdit(colors_.body, colors_.bodyOpacity);
         ImGui::SetNextItemWidth(112.f);
-        if (ImGui::ColorEdit3("##body-color", bodyColor.data(),
+        if (ImGui::ColorEdit4("##body-color", bodyColor.data(),
                               ImGuiColorEditFlags_DisplayHex | ImGuiColorEditFlags_NoLabel)) {
-            colors_.body = fromColorEdit(bodyColor);
+            colors_.body = fromColorEdit(bodyColor, colors_.bodyOpacity);
         }
-        auto frameColor = toColorEdit(colors_.eyeframe);
+        auto frameColor = toColorEdit(colors_.eyeframe, colors_.eyeframeOpacity);
         ImGui::SetNextItemWidth(112.f);
-        if (ImGui::ColorEdit3("##eye-frame-color", frameColor.data(),
+        if (ImGui::ColorEdit4("##eye-frame-color", frameColor.data(),
                               ImGuiColorEditFlags_DisplayHex | ImGuiColorEditFlags_NoLabel)) {
-            colors_.eyeframe = fromColorEdit(frameColor);
+            colors_.eyeframe = fromColorEdit(frameColor, colors_.eyeframeOpacity);
         }
-        auto ballColor = toColorEdit(colors_.eyeball);
+        auto ballColor = toColorEdit(colors_.eyeball, colors_.eyeballOpacity);
         ImGui::SetNextItemWidth(112.f);
-        if (ImGui::ColorEdit3("##eye-center-color", ballColor.data(),
+        if (ImGui::ColorEdit4("##eye-center-color", ballColor.data(),
                               ImGuiColorEditFlags_DisplayHex | ImGuiColorEditFlags_NoLabel)) {
-            colors_.eyeball = fromColorEdit(ballColor);
+            colors_.eyeball = fromColorEdit(ballColor, colors_.eyeballOpacity);
         }
-        auto backgroundColor = toColorEdit(colors_.background);
+        auto backgroundColor = toColorEdit(colors_.background, colors_.backgroundOpacity);
         ImGui::SetNextItemWidth(112.f);
-        if (ImGui::ColorEdit3("##background-color", backgroundColor.data(),
+        if (ImGui::ColorEdit4("##background-color", backgroundColor.data(),
                               ImGuiColorEditFlags_DisplayHex | ImGuiColorEditFlags_NoLabel)) {
-            colors_.background = fromColorEdit(backgroundColor);
+            colors_.background = fromColorEdit(backgroundColor, colors_.backgroundOpacity);
         }
         ImGui::SameLine();
         ImGui::TextUnformatted("background");
         ImGui::EndTable();
     }
     ImGui::Spacing();
-
-    if (ImGui::Button("Paste from clipboard", ImVec2(170.f, 34.f))) {
-        const char* clipboard = ImGui::GetClipboardText();
-        text_ = clipboard != nullptr ? clipboard : "";
-        rebuildPreview();
-        status_ = text_.empty() ? "Clipboard is empty." : "Text pasted from clipboard.";
-    }
-    ImGui::SameLine();
-    if (ImGui::Button("Generate SVG", ImVec2(140.f, 34.f)) || ImGui::IsKeyPressed(ImGuiKey_Enter)) {
-        generate();
-    }
 
     ImGui::Spacing();
     ImGui::Separator();
@@ -232,16 +246,33 @@ void GuiApp::drawInterface() {
     const ImVec2 origin = ImGui::GetCursorScreenPos();
     const ImVec2 size = ImGui::GetContentRegionAvail();
     ImDrawList* drawList = ImGui::GetWindowDrawList();
-    drawList->AddRectFilled(origin, ImVec2(origin.x + size.x, origin.y + size.y), toImGuiColor(colors_.background));
+    constexpr float checkerSize = 18.f;
+    for (float y = origin.y; y < origin.y + size.y; y += checkerSize) {
+        for (float x = origin.x; x < origin.x + size.x; x += checkerSize) {
+            const bool light = (static_cast<int>((x - origin.x) / checkerSize) +
+                                static_cast<int>((y - origin.y) / checkerSize)) % 2 == 0;
+            const ImU32 checkerColor = light ? IM_COL32(244, 245, 247, 255) : IM_COL32(219, 222, 226, 255);
+            drawList->AddRectFilled(ImVec2(x, y),
+                                    ImVec2(std::min(x + checkerSize, origin.x + size.x),
+                                           std::min(y + checkerSize, origin.y + size.y)),
+                                    checkerColor);
+        }
+    }
     if (qr_) {
         const int count = qr_->getSize();
-        const float module = std::max(1.f, std::min(size.x - 32.f, size.y - 32.f) / static_cast<float>(count));
+        constexpr float quietZoneModules = static_cast<float>(qrstyle::QrStyle::kDefaultBorder);
+        const float totalModules = static_cast<float>(count) + quietZoneModules * 2.f;
+        const float module = std::max(1.f, std::min(size.x - 32.f, size.y - 32.f) / totalModules);
         const float qrSize = module * static_cast<float>(count);
         const float left = origin.x + (size.x - qrSize) * 0.5f;
         const float top = origin.y + (size.y - qrSize) * 0.5f;
-        const ImU32 bodyInk = toImGuiColor(colors_.body);
-        const ImU32 frameInk = toImGuiColor(colors_.eyeframe);
-        const ImU32 ballInk = toImGuiColor(colors_.eyeball);
+        const float quietZone = quietZoneModules * module;
+        drawList->AddRectFilled(ImVec2(left - quietZone, top - quietZone),
+                                ImVec2(left + qrSize + quietZone, top + qrSize + quietZone),
+                                toImGuiColor(colors_.background, colors_.backgroundOpacity));
+        const ImU32 bodyInk = toImGuiColor(colors_.body, colors_.bodyOpacity);
+        const ImU32 frameInk = toImGuiColor(colors_.eyeframe, colors_.eyeframeOpacity);
+        const ImU32 ballInk = toImGuiColor(colors_.eyeball, colors_.eyeballOpacity);
         const auto drawTile = [&](int x, int y, auto shape, ImU32 ink) {
             const ImVec2 p0(left + x * module, top + y * module);
             const ImVec2 p1(p0.x + module + 0.15f, p0.y + module + 0.15f);

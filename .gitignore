@@ -67,6 +67,9 @@ vcpkg_installed/
 Testing/
 .cache/
 
+# Project Specific
+00_Screens/
+
 # generated QR output
 *.svg
 
