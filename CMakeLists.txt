@@ -7,6 +7,26 @@ project(JR-QRMaker
     LANGUAGES CXX
 )
 
+include(GNUInstallDirs)
+
+# Keep non-code application assets available beside the build tree and in
+# installed packages. CONFIGURE_DEPENDS refreshes this list when assets are
+# added or removed, while the always-built target copies their current contents.
+file(GLOB_RECURSE JR_QRMAKER_RESOURCE_FILES CONFIGURE_DEPENDS
+    "${CMAKE_CURRENT_SOURCE_DIR}/resources/*"
+)
+add_custom_target(jr_qrmaker_resources ALL
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+        "${CMAKE_CURRENT_SOURCE_DIR}/resources"
+        "${CMAKE_CURRENT_BINARY_DIR}/resources"
+    DEPENDS ${JR_QRMAKER_RESOURCE_FILES}
+    COMMENT "Copying JR-QRMaker application resources"
+    VERBATIM
+)
+install(DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/resources/"
+    DESTINATION "${CMAKE_INSTALL_DATADIR}/jr-qrmaker/resources"
+)
+
 # Enforce C++20 standard
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -27,6 +47,7 @@ endif()
 
 # Main application executable target (CLI)
 add_executable(JR-QRMaker src/main.cpp)
+add_dependencies(JR-QRMaker jr_qrmaker_resources)
 
 # Link core module libraries using modern CMake alias targets
 target_link_libraries(JR-QRMaker
@@ -44,6 +65,7 @@ endif()
 
 if(JR_QRMAKER_BUILD_GUI)
     add_executable(JR-QRMaker-gui src/gui_main.cpp)
+    add_dependencies(JR-QRMaker-gui jr_qrmaker_resources)
     target_link_libraries(JR-QRMaker-gui PRIVATE jr::gui)
 
     if(MSVC)

@@ -72,6 +72,10 @@ target_link_libraries(jr_gui
 )
 
 target_compile_features(jr_gui PUBLIC cxx_std_20)
+target_compile_definitions(jr_gui PRIVATE
+    "JR_QRMAKER_BUILD_RESOURCE_DIR=\"${CMAKE_BINARY_DIR}/resources\""
+    "JR_QRMAKER_SOURCE_RESOURCE_DIR=\"${CMAKE_SOURCE_DIR}/resources\""
+)
 
 if(MSVC)
     target_compile_options(jr_gui PRIVATE /W4 /permissive-)

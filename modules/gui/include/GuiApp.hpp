@@ -7,6 +7,7 @@
 
 #include <optional>
 #include <string>
+#include <vector>
 
 namespace gui {
 
@@ -25,12 +26,23 @@ private:
     void tabContent_Border();
     void tabContent_Label();
     void tabContent_Status();
+    void drawColorPaletteViewer();
+    void loadColorPalettes();
+    void applyColorPalette(std::size_t paletteIndex);
+
+    struct ColorPalette {
+        std::string name;
+        std::vector<std::string> colors;
+    };
 
     std::string text_;
     std::string outputText_{"qrcode.svg"};
     std::string status_{"Enter text or a link to create a QR code."};
     qrstyle::QrStyle::StyleShape style_{};
     qrstyle::QrStyle::StyleColor colors_{};
+    std::vector<ColorPalette> palettes_;
+    std::string paletteLoadMessage_;
+    int selectedPalette_{-1};
     std::optional<qrcodegen::QrCode> qr_;
     sf::RenderWindow window_;
 };

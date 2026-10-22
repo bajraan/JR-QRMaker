@@ -12,7 +12,9 @@
 #include <cstdio>
 #include <cstring>
 #include <exception>
+#include <fstream>
 #include <filesystem>
+#include <sstream>
 
 namespace gui {
 namespace {
@@ -68,6 +70,7 @@ GuiApp::GuiApp(std::string initialText)
     : text_(std::move(initialText)),
       window_(sf::VideoMode({kWindowWidth, kWindowHeight}), "JR-QRMaker", sf::Style::Titlebar | sf::Style::Close) {
     window_.setFramerateLimit(60);
+    loadColorPalettes();
     rebuildPreview();
 }
 
@@ -460,7 +463,11 @@ void GuiApp::tabContent_Style()
             ImGui::TableSetColumnIndex(2);
             auto bodyColor = toColorEdit(colors_.body, colors_.bodyOpacity);
             ImGui::SetNextItemWidth(112.f);
-            if (ImGui::ColorEdit4("##body-color", bodyColor.data(), ImGuiColorEditFlags_DisplayHex | ImGuiColorEditFlags_NoLabel)) {
+            if ( ImGui::ColorEdit4 (  "##body-color", bodyColor.data(), 
+                                      ImGuiColorEditFlags_DisplayHex | ImGuiColorEditFlags_NoLabel | ImGuiColorEditFlags_NoBorder
+                                   )
+               ) 
+            {
                 colors_.body = fromColorEdit(bodyColor, colors_.bodyOpacity);
             }
 
@@ -490,7 +497,8 @@ void GuiApp::tabContent_Style()
             ImGui::TableSetColumnIndex(2);
             auto frameColor = toColorEdit(colors_.eyeframe, colors_.eyeframeOpacity);
             ImGui::SetNextItemWidth(112.f);
-            if (ImGui::ColorEdit4("##eye-frame-color", frameColor.data(), ImGuiColorEditFlags_DisplayHex | ImGuiColorEditFlags_NoLabel)) {
+            if (ImGui::ColorEdit4("##eye-frame-color", frameColor.data(), 
+                                   ImGuiColorEditFlags_DisplayHex | ImGuiColorEditFlags_NoLabel |  ImGuiColorEditFlags_NoBorder)){
                 colors_.eyeframe = fromColorEdit(frameColor, colors_.eyeframeOpacity);
             }
 
@@ -520,7 +528,7 @@ void GuiApp::tabContent_Style()
             ImGui::TableSetColumnIndex(2);
             auto ballColor = toColorEdit(colors_.eyeball, colors_.eyeballOpacity);
             ImGui::SetNextItemWidth(112.f);
-            if (ImGui::ColorEdit4("##eye-center-color", ballColor.data(), ImGuiColorEditFlags_DisplayHex | ImGuiColorEditFlags_NoLabel)) {
+            if (ImGui::ColorEdit4("##eye-center-color", ballColor.data(), ImGuiColorEditFlags_DisplayHex | ImGuiColorEditFlags_NoLabel | ImGuiColorEditFlags_NoBorder)) {
                 colors_.eyeball = fromColorEdit(ballColor, colors_.eyeballOpacity);
             }
 
@@ -547,7 +555,7 @@ void GuiApp::tabContent_Style()
             ImGui::AlignTextToFramePadding();
             auto backgroundColor = toColorEdit(colors_.background, colors_.backgroundOpacity);
             ImGui::SetNextItemWidth(112.f);
-            if (ImGui::ColorEdit4("##background-color", backgroundColor.data(), ImGuiColorEditFlags_DisplayHex | ImGuiColorEditFlags_NoLabel)) {
+            if (ImGui::ColorEdit4("##background-color", backgroundColor.data(), ImGuiColorEditFlags_DisplayHex | ImGuiColorEditFlags_NoLabel | ImGuiColorEditFlags_NoBorder)) {
                 colors_.background = fromColorEdit(backgroundColor, colors_.backgroundOpacity);
             }
 
@@ -570,6 +578,11 @@ void GuiApp::tabContent_Style()
     ImGui::Spacing();
     ImGui::Spacing();
 
+    drawColorPaletteViewer();
+
+    ImGui::Spacing();
+    ImGui::Spacing();
+
     //ImGui::TextUnformatted("STATUS");
     //ImGui::TextWrapped("%s", status_.c_str());
 
@@ -581,80 +594,160 @@ void GuiApp::tabContent_Style()
 
 }
 
-// void GuiApp::tabContent_Style_tmp_()
-// {
-//     if (ImGui::BeginTable("##style-color-layout", 2, ImGuiTableFlags_SizingStretchProp)) 
-//     {
-//         ImGui::TableSetupColumn("Shapes", ImGuiTableColumnFlags_WidthStretch, 1.05f);
-//         ImGui::TableSetupColumn("Colors", ImGuiTableColumnFlags_WidthStretch, 0.95f);
-//         ImGui::TableNextRow();
-//         ImGui::TableSetColumnIndex(0);
-//         ImGui::TextUnformatted("MODULE SHAPES");
-//         const char* bodyShapes[] = {"Square", "Rounded", "Circles"};
-//         int bodyShape = static_cast<int>(style_.bodystyle);
-//         ImGui::SetNextItemWidth(120.f);
-//         if (ImGui::Combo("Body", &bodyShape, bodyShapes, IM_ARRAYSIZE(bodyShapes))) {
-//             style_.bodystyle = static_cast<qrstyle::QrStyle::body>(bodyShape);
-//         }
-//         const char* eyeShapes[] = {"Square", "Rounded", "Circle", "Circles"};
-//         int frameShape = static_cast<int>(style_.eyeframestyle);
-//         ImGui::SetNextItemWidth(120.f);
-//         if (ImGui::Combo("Eye frame", &frameShape, eyeShapes, IM_ARRAYSIZE(eyeShapes))) {
-//             style_.eyeframestyle = static_cast<qrstyle::QrStyle::eyeframe>(frameShape);
-//         }
-//         int ballShape = static_cast<int>(style_.eyeballstyle);
-//         ImGui::SetNextItemWidth(120.f);
-//         if (ImGui::Combo("Eye center", &ballShape, eyeShapes, IM_ARRAYSIZE(eyeShapes))) {
-//             style_.eyeballstyle = static_cast<qrstyle::QrStyle::eyeball>(ballShape);
-//         }
+void GuiApp::loadColorPalettes() {
+    std::vector<std::filesystem::path> searchPaths;
+    const std::filesystem::path workingDirectory = std::filesystem::current_path();
+    searchPaths.emplace_back(workingDirectory / "resources" / "colorpallets");
+    searchPaths.emplace_back(workingDirectory / ".." / "resources" / "colorpallets");
+    searchPaths.emplace_back(workingDirectory / ".." / "share" / "jr-qrmaker" / "resources" / "colorpallets");
+    searchPaths.emplace_back(workingDirectory / "share" / "jr-qrmaker" / "resources" / "colorpallets");
+#ifdef JR_QRMAKER_BUILD_RESOURCE_DIR
+    searchPaths.emplace_back(std::filesystem::path(JR_QRMAKER_BUILD_RESOURCE_DIR) / "colorpallets");
+#endif
+#ifdef JR_QRMAKER_SOURCE_RESOURCE_DIR
+    searchPaths.emplace_back(std::filesystem::path(JR_QRMAKER_SOURCE_RESOURCE_DIR) / "colorpallets");
+#endif
 
-//         ImGui::TableSetColumnIndex(1);
-//         ImGui::TextUnformatted("REGION COLORS");
-//         auto bodyColor = toColorEdit(colors_.body, colors_.bodyOpacity);
-//         ImGui::SetNextItemWidth(112.f);
-//         if (ImGui::ColorEdit4("##body-color", bodyColor.data(),
-//                               ImGuiColorEditFlags_DisplayHex | ImGuiColorEditFlags_NoLabel)) {
-//             colors_.body = fromColorEdit(bodyColor, colors_.bodyOpacity);
-//         }
-//         auto frameColor = toColorEdit(colors_.eyeframe, colors_.eyeframeOpacity);
-//         ImGui::SetNextItemWidth(112.f);
-//         if (ImGui::ColorEdit4("##eye-frame-color", frameColor.data(),
-//                               ImGuiColorEditFlags_DisplayHex | ImGuiColorEditFlags_NoLabel)) {
-//             colors_.eyeframe = fromColorEdit(frameColor, colors_.eyeframeOpacity);
-//         }
-//         auto ballColor = toColorEdit(colors_.eyeball, colors_.eyeballOpacity);
-//         ImGui::SetNextItemWidth(112.f);
-//         if (ImGui::ColorEdit4("##eye-center-color", ballColor.data(),
-//                               ImGuiColorEditFlags_DisplayHex | ImGuiColorEditFlags_NoLabel)) {
-//             colors_.eyeball = fromColorEdit(ballColor, colors_.eyeballOpacity);
-//         }
-//         auto backgroundColor = toColorEdit(colors_.background, colors_.backgroundOpacity);
-//         ImGui::SetNextItemWidth(112.f);
-//         if (ImGui::ColorEdit4("##background-color", backgroundColor.data(),
-//                               ImGuiColorEditFlags_DisplayHex | ImGuiColorEditFlags_NoLabel)) {
-//             colors_.background = fromColorEdit(backgroundColor, colors_.backgroundOpacity);
-//         }
-//         ImGui::SameLine();
-//         ImGui::TextUnformatted("background");
-//         ImGui::EndTable();
-//     }
-//     ImGui::Spacing();
-//     ImGui::Spacing();
-//     ImGui::Separator();
-//     ImGui::TextUnformatted("STATUS");
-//     ImGui::TextWrapped("%s", status_.c_str());
-// }
+    std::filesystem::path paletteDirectory;
+    for (const auto& candidate : searchPaths) {
+        std::error_code error;
+        if (std::filesystem::is_directory(candidate, error)) {
+            paletteDirectory = candidate;
+            break;
+        }
+    }
+    if (paletteDirectory.empty()) {
+        paletteLoadMessage_ = "Palette resources were not found.";
+        return;
+    }
 
-void GuiApp::tabContent_Label()
-{
+    std::vector<std::filesystem::path> files;
+    std::error_code error;
+    for (std::filesystem::directory_iterator it(paletteDirectory, error), end; !error && it != end; it.increment(error)) {
+        if (it->is_regular_file(error) && it->path().extension() == ".gpl") {
+            files.push_back(it->path());
+        }
+    }
+    std::sort(files.begin(), files.end());
+
+    for (const auto& filePath : files) {
+        std::ifstream file(filePath);
+        if (!file) {
+            continue;
+        }
+
+        ColorPalette palette;
+        palette.name = filePath.stem().string();
+        std::string line;
+        while (std::getline(file, line)) {
+            if (line.rfind("Name:", 0) == 0) {
+                const std::size_t first = line.find_first_not_of(" \t", 5);
+                if (first != std::string::npos) {
+                    palette.name = line.substr(first);
+                }
+                continue;
+            }
+            if (line.empty() || line[0] == '#' || line.rfind("GIMP Palette", 0) == 0 ||
+                line.rfind("Columns:", 0) == 0) {
+                continue;
+            }
+
+            std::istringstream colorLine(line);
+            int red = 0;
+            int green = 0;
+            int blue = 0;
+            if (!(colorLine >> red >> green >> blue) || red < 0 || red > 255 || green < 0 || green > 255 ||
+                blue < 0 || blue > 255) {
+                continue;
+            }
+
+            char hex[7]{};
+            std::snprintf(hex, sizeof(hex), "%02X%02X%02X", red, green, blue);
+            palette.colors.emplace_back(hex);
+        }
+        if (!palette.colors.empty()) {
+            palettes_.push_back(std::move(palette));
+        }
+    }
+
+    paletteLoadMessage_ = palettes_.empty() ? "No readable .gpl color palettes were found." : "";
+}
+
+void GuiApp::drawColorPaletteViewer() {
+    const float remainingHeight = ImGui::GetContentRegionAvail().y;
+    const float viewerHeight = std::max(90.f, std::min(400.f, remainingHeight - 76.f));
+    if (!ImGui::BeginChild("##PaletteViewer", ImVec2(0.f, viewerHeight), ImGuiChildFlags_Borders)) {
+        ImGui::EndChild();
+        return;
+    }
+
+    ImGui::TextUnformatted("COLOR PALETTE VIEWER");
+    ImGui::SameLine();
+    ImGui::TextDisabled("Click a palette to apply it");
+    ImGui::Separator();
+
+    if (palettes_.empty()) {
+        ImGui::TextWrapped("%s", paletteLoadMessage_.c_str());
+    } else {
+        for (std::size_t i = 0; i < palettes_.size(); ++i) {
+            const ColorPalette& palette = palettes_[i];
+            ImGui::PushID(static_cast<int>(i));
+            const bool selected = static_cast<int>(i) == selectedPalette_;
+            const bool clicked = ImGui::Selectable("##palette-card", selected, ImGuiSelectableFlags_None,
+                                                    ImVec2(0.f, 38.f));
+            const ImVec2 itemMin = ImGui::GetItemRectMin();
+            const ImVec2 itemMax = ImGui::GetItemRectMax();
+            ImDrawList* drawList = ImGui::GetWindowDrawList();
+            drawList->PushClipRect(itemMin, itemMax, true);
+            const float swatchStart = itemMin.x + 8.f;
+            const float swatchEnd = itemMax.x - 8.f;
+            const float swatchArea = std::max(0.f, swatchEnd - swatchStart);
+            const float swatchWidth = swatchArea / static_cast<float>(palette.colors.size());
+            const float swatchHeight = 40.f;
+            const float swatchY = itemMin.y + (itemMax.y - itemMin.y - swatchHeight) * 0.5f;
+            for (std::size_t colorIndex = 0; colorIndex < palette.colors.size(); ++colorIndex) {
+                const float left = swatchStart + colorIndex * swatchWidth;
+                const ImVec2 min(left, swatchY);
+                const float right = colorIndex + 1 == palette.colors.size() ? swatchEnd : left + swatchWidth;
+                const ImVec2 max(right, swatchY + swatchHeight);
+                const ImU32 color = toImGuiColor(palette.colors[colorIndex]);
+                drawList->AddRectFilled(min, max, color);
+            }
+            drawList->PopClipRect();
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetTooltip("%s — %zu colors", palette.name.c_str(), palette.colors.size());
+            }
+            if (clicked) {
+                applyColorPalette(i);
+            }
+            ImGui::PopID();
+        }
+    }
+    ImGui::EndChild();
+}
+
+void GuiApp::applyColorPalette(std::size_t paletteIndex) {
+    if (paletteIndex >= palettes_.size()) {
+        return;
+    }
+    const ColorPalette& palette = palettes_[paletteIndex];
+    colors_.body = palette.colors[0];
+    colors_.eyeframe = palette.colors[std::min<std::size_t>(1, palette.colors.size() - 1)];
+    colors_.eyeball = palette.colors[std::min<std::size_t>(2, palette.colors.size() - 1)];
+    if (palette.colors.size() >= 4) {
+        colors_.background = palette.colors.back();
+    }
+    selectedPalette_ = static_cast<int>(paletteIndex);
+    status_ = "Applied color palette: " + palette.name;
+}
+
+void GuiApp::tabContent_Label(){
     tabContent_Status();
 }
 
-void GuiApp::tabContent_Border()
-{
+void GuiApp::tabContent_Border(){
     tabContent_Status();
 }
-
 
 void GuiApp::tabContent_Status()
 {
