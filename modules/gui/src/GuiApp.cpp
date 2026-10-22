@@ -108,28 +108,49 @@ void GuiApp::drawInterface() {
                      ImGuiWindowFlags_NoSavedSettings);
 
     ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(0.93f, 0.95f, 0.98f, 1.f));
-    ImGui::TextUnformatted("QR CODE STUDIO");
-    ImGui::SameLine();
-    ImGui::TextDisabled("  Create a QR code and save it as SVG");
+    
+    
     ImGui::Spacing();
     ImGui::Separator();
     ImGui::Spacing();
 
-    if (ImGui::BeginTable("##source-fields", 2, ImGuiTableFlags_BordersInnerH, ImVec2(-1.f, 0.f))) {
-        ImGui::TableSetupColumn("Actions", ImGuiTableColumnFlags_WidthFixed, 92.f);
-        ImGui::TableSetupColumn("Input fields", ImGuiTableColumnFlags_WidthStretch);
+    /*
+     *  SECTION 1 - PASTE / TEXT
+     *
+     *
+     */
+  {
+    // Rozpoczynamy grupę dla całej linii, żeby łatwo kontrolować pozycję
+    ImGui::BeginGroup();
+    
+    // Układ dwukolumnowy (lewa strona: przycisk, prawa strona: tekst i input)
+    // Używamy tabeli bez ramek (ImGuiTableFlags_None) tylko jako układu pozycjonującego
+    if (ImGui::BeginTable("##content_table", 2, ImGuiTableFlags_SizingFixedFit, ImVec2(-1.f, 0.f))) {
+        ImGui::TableSetupColumn("Action", ImGuiTableColumnFlags_WidthFixed, 92.f);
+        ImGui::TableSetupColumn("Content", ImGuiTableColumnFlags_WidthStretch);
+        
         ImGui::TableNextRow();
+        
+        // Kolumna 0: Przycisk Paste dopasowany wysokością do pola input + etykiet
         ImGui::TableSetColumnIndex(0);
-        if (ImGui::Button("Paste", ImVec2(-1.f, 34.f))) {
+        // Obliczamy wysokość: etykieta (~15px) + odstęp + InputText (~24px) + marginesy = np. ~50-54px
+        if (ImGui::Button("Paste", ImVec2(92.f, 52.f))) {
             const char* clipboard = ImGui::GetClipboardText();
             text_ = clipboard != nullptr ? clipboard : "";
             rebuildPreview();
             status_ = text_.empty() ? "Clipboard is empty." : "Text pasted from clipboard.";
         }
+        
+        // Kolumna 1: Etykieta, opis i pole tekstowe
         ImGui::TableSetColumnIndex(1);
+        ImGui::Spacing();
+        ImGui::Spacing();
+        ImGui::Spacing();
         ImGui::TextUnformatted("CONTENT");
         ImGui::SameLine();
         ImGui::TextDisabled("Paste a URL or any text you want to encode.");
+        ImGui::Spacing();
+        
         ImGui::SetNextItemWidth(-1.f);
         text_.resize(kInputCapacity, '\0');
         const bool contentEdited = ImGui::InputText("##content", text_.data(), text_.size(),
@@ -139,101 +160,139 @@ void GuiApp::drawInterface() {
             rebuildPreview();
         }
         ImGui::SetItemDefaultFocus();
+        
+        ImGui::EndTable();
+    }
+    ImGui::EndGroup();
+  }
 
+    ImGui::Spacing();
+    ImGui::Separator();
+    ImGui::Spacing();
+
+    /*
+     *  SECTION 2 - GENERATE / FILE NAME
+     *
+     *
+     */
+  {
+    ImGui::BeginGroup();
+    
+    if (ImGui::BeginTable("##output_table", 2, ImGuiTableFlags_SizingFixedFit, ImVec2(-1.f, 0.f))) {
+        ImGui::TableSetupColumn("Action", ImGuiTableColumnFlags_WidthFixed, 92.f);
+        ImGui::TableSetupColumn("Output", ImGuiTableColumnFlags_WidthStretch);
+        
         ImGui::TableNextRow();
+        
+        // Kolumna 0: Przycisk Generate
         ImGui::TableSetColumnIndex(0);
-        if (ImGui::Button("Generate", ImVec2(-1.f, 34.f)) || ImGui::IsKeyPressed(ImGuiKey_Enter)) {
+        if (ImGui::Button("Generate", ImVec2(92.f, 52.f)) || ImGui::IsKeyPressed(ImGuiKey_Enter)) {
             generate();
         }
+        
+        // Kolumna 1: Etykieta i input pliku wyjściowego
         ImGui::TableSetColumnIndex(1);
+        ImGui::Spacing();
+        ImGui::Spacing();
+        ImGui::Spacing();
         ImGui::TextUnformatted("OUTPUT FILE");
         ImGui::SameLine();
         ImGui::TextDisabled("The .svg extension is added automatically when omitted.");
+        ImGui::Spacing();
+
         ImGui::SetNextItemWidth(-1.f);
         outputText_.resize(512, '\0');
         ImGui::InputText("##output", outputText_.data(), outputText_.size());
         outputText_.resize(std::strlen(outputText_.c_str()));
+        
         ImGui::EndTable();
     }
+    ImGui::EndGroup();
+  }
+
     ImGui::Spacing();
     ImGui::Separator();
     ImGui::Spacing();
 
-    constexpr float kSettingsWidth = 390.f;
-    if (!ImGui::BeginTable("##editor-layout", 2,
-                           ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_SizingStretchProp,
-                           ImVec2(-1.f, -1.f))) {
+    /*
+     *  SECTION 3 - Configuration tabs // SECTION 4 - QR Preview
+     *
+     * 
+     */
+
+    constexpr float kSettingsWidth = 500.f;
+    if (!ImGui::BeginTable ( "##editor-layout", 2,
+                             ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_SizingStretchProp,
+                             ImVec2(-1.f, -1.f)
+                           )
+    ) 
+    {
         ImGui::PopStyleColor();
         ImGui::End();
         return;
     }
+
     ImGui::TableSetupColumn("Settings", ImGuiTableColumnFlags_WidthFixed, kSettingsWidth);
     ImGui::TableSetupColumn("QR preview", ImGuiTableColumnFlags_WidthStretch);
     ImGui::TableNextRow();
-
     ImGui::TableSetColumnIndex(0);
-    if (ImGui::BeginTable("##style-color-layout", 2, ImGuiTableFlags_SizingStretchProp)) {
-        ImGui::TableSetupColumn("Shapes", ImGuiTableColumnFlags_WidthStretch, 1.05f);
-        ImGui::TableSetupColumn("Colors", ImGuiTableColumnFlags_WidthStretch, 0.95f);
-        ImGui::TableNextRow();
-        ImGui::TableSetColumnIndex(0);
-        ImGui::TextUnformatted("MODULE SHAPES");
-        const char* bodyShapes[] = {"Square", "Rounded", "Circles"};
-        int bodyShape = static_cast<int>(style_.bodystyle);
-        ImGui::SetNextItemWidth(120.f);
-        if (ImGui::Combo("Body", &bodyShape, bodyShapes, IM_ARRAYSIZE(bodyShapes))) {
-            style_.bodystyle = static_cast<qrstyle::QrStyle::body>(bodyShape);
-        }
-        const char* eyeShapes[] = {"Square", "Rounded", "Circle", "Circles"};
-        int frameShape = static_cast<int>(style_.eyeframestyle);
-        ImGui::SetNextItemWidth(120.f);
-        if (ImGui::Combo("Eye frame", &frameShape, eyeShapes, IM_ARRAYSIZE(eyeShapes))) {
-            style_.eyeframestyle = static_cast<qrstyle::QrStyle::eyeframe>(frameShape);
-        }
-        int ballShape = static_cast<int>(style_.eyeballstyle);
-        ImGui::SetNextItemWidth(120.f);
-        if (ImGui::Combo("Eye center", &ballShape, eyeShapes, IM_ARRAYSIZE(eyeShapes))) {
-            style_.eyeballstyle = static_cast<qrstyle::QrStyle::eyeball>(ballShape);
-        }
 
-        ImGui::TableSetColumnIndex(1);
-        ImGui::TextUnformatted("REGION COLORS");
-        auto bodyColor = toColorEdit(colors_.body, colors_.bodyOpacity);
-        ImGui::SetNextItemWidth(112.f);
-        if (ImGui::ColorEdit4("##body-color", bodyColor.data(),
-                              ImGuiColorEditFlags_DisplayHex | ImGuiColorEditFlags_NoLabel)) {
-            colors_.body = fromColorEdit(bodyColor, colors_.bodyOpacity);
-        }
-        auto frameColor = toColorEdit(colors_.eyeframe, colors_.eyeframeOpacity);
-        ImGui::SetNextItemWidth(112.f);
-        if (ImGui::ColorEdit4("##eye-frame-color", frameColor.data(),
-                              ImGuiColorEditFlags_DisplayHex | ImGuiColorEditFlags_NoLabel)) {
-            colors_.eyeframe = fromColorEdit(frameColor, colors_.eyeframeOpacity);
-        }
-        auto ballColor = toColorEdit(colors_.eyeball, colors_.eyeballOpacity);
-        ImGui::SetNextItemWidth(112.f);
-        if (ImGui::ColorEdit4("##eye-center-color", ballColor.data(),
-                              ImGuiColorEditFlags_DisplayHex | ImGuiColorEditFlags_NoLabel)) {
-            colors_.eyeball = fromColorEdit(ballColor, colors_.eyeballOpacity);
-        }
-        auto backgroundColor = toColorEdit(colors_.background, colors_.backgroundOpacity);
-        ImGui::SetNextItemWidth(112.f);
-        if (ImGui::ColorEdit4("##background-color", backgroundColor.data(),
-                              ImGuiColorEditFlags_DisplayHex | ImGuiColorEditFlags_NoLabel)) {
-            colors_.background = fromColorEdit(backgroundColor, colors_.backgroundOpacity);
+
+        enum class Tab { style, border, label };
+        static Tab tab = Tab::style; // Pamiętaj o inicjalizacji!
+
+
+        // Pomocnicza lambda lub funkcja do rysowania przycisku zakładki z podświetleniem
+        auto tabButton = [](const char* label, bool isActive) {
+            if (isActive) {
+                // Kolor dla aktywnego przycisku (np. wyraźny niebieski)
+                ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.5f, 0.8f, 1.0f));
+                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.3f, 0.6f, 0.9f, 1.0f));
+            }
+
+            bool clicked = ImGui::Button(label, ImVec2(50.f, 25.f));
+
+            if (isActive) {
+                ImGui::PopStyleColor(2); // Zawsze zdejmuj tyle stylów, ile nałożyłeś!
+            }
+
+            return clicked;
+        };
+
+        // --- Rysowanie przycisków w jednej linii ---
+        if (tabButton("style", tab == Tab::style)) {
+            tab = Tab::style;
         }
         ImGui::SameLine();
-        ImGui::TextUnformatted("background");
-        ImGui::EndTable();
-    }
-    ImGui::Spacing();
+        if (tabButton("border", tab == Tab::border)) {
+            tab = Tab::border;
+        }
+        ImGui::SameLine();
+        if (tabButton("label", tab == Tab::label)) {
+            tab = Tab::label;
+        }
 
-    ImGui::Spacing();
-    ImGui::Separator();
-    ImGui::TextUnformatted("STATUS");
-    ImGui::TextWrapped("%s", status_.c_str());
+        // --- Obsługa widoku zakładki ---
+        switch (tab) {
+            case Tab::style  : tabContent_Style();  break;
+            case Tab::border : tabContent_Border(); break;
+            case Tab::label  : tabContent_Label();  break;
+        }
+
 
     ImGui::TableSetColumnIndex(1);
+
+    drawQrPreview();    // QR Preview
+
+    ImGui::EndTable();
+    ImGui::PopStyleColor();
+    ImGui::End();
+
+}
+
+void GuiApp::drawQrPreview()
+{
+
     ImGui::TextUnformatted("QR PREVIEW");
     ImGui::SameLine();
     if (qr_) {
@@ -316,9 +375,11 @@ void GuiApp::drawInterface() {
             }
         }
         if (style_.eyeframestyle == qrstyle::QrStyle::eyeframe::CIRCLE) {
-            const ImVec2 centers[] = {{left + module * 3.5f, top + module * 3.5f},
-                                      {left + module * (count - 3.5f), top + module * 3.5f},
-                                      {left + module * 3.5f, top + module * (count - 3.5f)}};
+            const ImVec2 centers[] = {
+                                        {left + module * 3.5f, top + module * 3.5f},
+                                        {left + module * (count - 3.5f), top + module * 3.5f},
+                                        {left + module * 3.5f, top + module * (count - 3.5f)}
+                                     };
             for (const ImVec2 center : centers) {
                 drawList->AddCircle(center, module * 3.f, frameInk, 0, module * 0.9f);
             }
@@ -353,10 +414,266 @@ void GuiApp::drawInterface() {
         }
     }
     ImGui::EndChild();
+}
 
-    ImGui::EndTable();
-    ImGui::PopStyleColor();
-    ImGui::End();
+void GuiApp::tabContent_Style()
+{
+    // 1. Area Style / Frame, Background
+    ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.16f, 0.16f, 0.18f, 1.0f)); // Gray Background 
+    ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(1.0f, 1.0f, 1.0f, 1.0f));     // White Frame
+    
+    // 2. PopUps background
+    ImGui::PushStyleColor(ImGuiCol_PopupBg, ImVec4(0.12f, 0.12f, 0.14f, 1.0f));  
+
+    ImGui::PushStyleVar(ImGuiStyleVar_ChildBorderSize, 1.0f);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(10.0f, 12.0f));
+    ImGui::PushStyleVar(ImGuiStyleVar_PopupBorderSize, 0.0f);   // disable white frame in PopUps
+
+    if (ImGui::BeginChild("##StyleContainer", ImVec2(0, 0), ImGuiChildFlags_AutoResizeY | ImGuiChildFlags_Border, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse))
+    {
+        if (ImGui::BeginTable("##StyleLayoutTable", 4, ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_NoSavedSettings)) 
+        {
+            ImGui::TableSetupColumn("Style", ImGuiTableColumnFlags_WidthFixed, 100.f);
+            ImGui::TableSetupColumn("Name", ImGuiTableColumnFlags_WidthFixed, 80.f);
+            ImGui::TableSetupColumn("Color", ImGuiTableColumnFlags_WidthFixed, 140.f);
+            ImGui::TableSetupColumn("Transparency", ImGuiTableColumnFlags_WidthStretch);
+
+            const char* bodyShapes[] = {"Square", "Rounded", "Circles"};
+            const char* eyeShapes[] = {"Square", "Rounded", "Circle", "Circles"};
+
+
+
+            // --- Row 1: Body ---
+            ImGui::TableNextRow();
+            ImGui::TableSetColumnIndex(0);
+            ImGui::AlignTextToFramePadding();
+            int bodyShape = static_cast<int>(style_.bodystyle);
+            ImGui::SetNextItemWidth(90.f);
+            if (ImGui::Combo("##BodyCombo", &bodyShape, bodyShapes, IM_ARRAYSIZE(bodyShapes))) {
+                style_.bodystyle = static_cast<qrstyle::QrStyle::body>(bodyShape);
+            }
+
+            ImGui::TableSetColumnIndex(1);
+            ImGui::AlignTextToFramePadding();
+            ImGui::Text("Body");
+
+            ImGui::TableSetColumnIndex(2);
+            auto bodyColor = toColorEdit(colors_.body, colors_.bodyOpacity);
+            ImGui::SetNextItemWidth(112.f);
+            if (ImGui::ColorEdit4("##body-color", bodyColor.data(), ImGuiColorEditFlags_DisplayHex | ImGuiColorEditFlags_NoLabel)) {
+                colors_.body = fromColorEdit(bodyColor, colors_.bodyOpacity);
+            }
+
+            ImGui::TableSetColumnIndex(3);
+            ImGui::AlignTextToFramePadding();
+            ImGui::SetNextItemWidth(-FLT_MIN);
+            if (ImGui::SliderFloat("##bodyOpacity", &colors_.bodyOpacity, 0.0f, 1.0f, "Opacity: %.2f")) 
+            {
+            }
+
+
+
+            // --- Row 2: Eye frame ---
+            ImGui::TableNextRow();
+            ImGui::TableSetColumnIndex(0);
+            ImGui::AlignTextToFramePadding();
+            int frameShape = static_cast<int>(style_.eyeframestyle);
+            ImGui::SetNextItemWidth(90.f);
+            if (ImGui::Combo("##FrameCombo", &frameShape, eyeShapes, IM_ARRAYSIZE(eyeShapes))) {
+                style_.eyeframestyle = static_cast<qrstyle::QrStyle::eyeframe>(frameShape);
+            }
+
+            ImGui::TableSetColumnIndex(1);
+            ImGui::AlignTextToFramePadding();
+            ImGui::Text("Eye Frame");
+
+            ImGui::TableSetColumnIndex(2);
+            auto frameColor = toColorEdit(colors_.eyeframe, colors_.eyeframeOpacity);
+            ImGui::SetNextItemWidth(112.f);
+            if (ImGui::ColorEdit4("##eye-frame-color", frameColor.data(), ImGuiColorEditFlags_DisplayHex | ImGuiColorEditFlags_NoLabel)) {
+                colors_.eyeframe = fromColorEdit(frameColor, colors_.eyeframeOpacity);
+            }
+
+            ImGui::TableSetColumnIndex(3);
+            ImGui::AlignTextToFramePadding();
+            ImGui::SetNextItemWidth(-FLT_MIN);
+            if (ImGui::SliderFloat("##eye-frame-Opacity", &colors_.eyeframeOpacity, 0.0f, 1.0f, "Opacity: %.2f")) 
+            {
+            }
+
+
+
+            // --- Row 3: Eye Ball ---
+            ImGui::TableNextRow();
+            ImGui::TableSetColumnIndex(0);
+            ImGui::AlignTextToFramePadding();
+            int ballShape = static_cast<int>(style_.eyeballstyle);
+            ImGui::SetNextItemWidth(90.f);
+            if (ImGui::Combo("##BallCombo", &ballShape, eyeShapes, IM_ARRAYSIZE(eyeShapes))) {
+                style_.eyeballstyle = static_cast<qrstyle::QrStyle::eyeball>(ballShape);
+            }
+
+            ImGui::TableSetColumnIndex(1);
+            ImGui::AlignTextToFramePadding();
+            ImGui::Text("Eye Ball");
+
+            ImGui::TableSetColumnIndex(2);
+            auto ballColor = toColorEdit(colors_.eyeball, colors_.eyeballOpacity);
+            ImGui::SetNextItemWidth(112.f);
+            if (ImGui::ColorEdit4("##eye-center-color", ballColor.data(), ImGuiColorEditFlags_DisplayHex | ImGuiColorEditFlags_NoLabel)) {
+                colors_.eyeball = fromColorEdit(ballColor, colors_.eyeballOpacity);
+            }
+
+            ImGui::TableSetColumnIndex(3);
+            ImGui::AlignTextToFramePadding();
+            ImGui::SetNextItemWidth(-FLT_MIN);
+            if (ImGui::SliderFloat("##eye-ball-Opacity", &colors_.eyeballOpacity, 0.0f, 1.0f, "Opacity: %.2f")) 
+            {
+            }
+
+
+
+            // --- Row 4: Background ---
+            ImGui::TableNextRow();
+            ImGui::TableSetColumnIndex(0);
+            ImGui::AlignTextToFramePadding();
+            ImGui::TextDisabled(" N/A ");
+
+            ImGui::TableSetColumnIndex(1);
+            ImGui::AlignTextToFramePadding();
+            ImGui::Text("Background");
+
+            ImGui::TableSetColumnIndex(2);
+            ImGui::AlignTextToFramePadding();
+            auto backgroundColor = toColorEdit(colors_.background, colors_.backgroundOpacity);
+            ImGui::SetNextItemWidth(112.f);
+            if (ImGui::ColorEdit4("##background-color", backgroundColor.data(), ImGuiColorEditFlags_DisplayHex | ImGuiColorEditFlags_NoLabel)) {
+                colors_.background = fromColorEdit(backgroundColor, colors_.backgroundOpacity);
+            }
+
+            ImGui::TableSetColumnIndex(3);
+            ImGui::AlignTextToFramePadding();
+            ImGui::SetNextItemWidth(-FLT_MIN);
+            if (ImGui::SliderFloat("##background-Opacity", &colors_.backgroundOpacity, 0.0f, 1.0f, "Opacity: %.2f")) 
+            {
+            }
+
+            ImGui::EndTable();
+        }
+    }
+    ImGui::EndChild();
+
+    // Zdejmujemy dokładnie tyle samo stylów, ile wrzuciliśmy (3 zmienne i 3 kolory)
+    ImGui::PopStyleVar(3);
+    ImGui::PopStyleColor(3);
+
+    ImGui::Spacing();
+    ImGui::Spacing();
+
+    //ImGui::TextUnformatted("STATUS");
+    //ImGui::TextWrapped("%s", status_.c_str());
+
+    
+    // --- BOX 2: Sekcja Statusu (opcjonalnie w osobnym, mniejszym boxie) ---
+    tabContent_Status();
+
+
+
+}
+
+// void GuiApp::tabContent_Style_tmp_()
+// {
+//     if (ImGui::BeginTable("##style-color-layout", 2, ImGuiTableFlags_SizingStretchProp)) 
+//     {
+//         ImGui::TableSetupColumn("Shapes", ImGuiTableColumnFlags_WidthStretch, 1.05f);
+//         ImGui::TableSetupColumn("Colors", ImGuiTableColumnFlags_WidthStretch, 0.95f);
+//         ImGui::TableNextRow();
+//         ImGui::TableSetColumnIndex(0);
+//         ImGui::TextUnformatted("MODULE SHAPES");
+//         const char* bodyShapes[] = {"Square", "Rounded", "Circles"};
+//         int bodyShape = static_cast<int>(style_.bodystyle);
+//         ImGui::SetNextItemWidth(120.f);
+//         if (ImGui::Combo("Body", &bodyShape, bodyShapes, IM_ARRAYSIZE(bodyShapes))) {
+//             style_.bodystyle = static_cast<qrstyle::QrStyle::body>(bodyShape);
+//         }
+//         const char* eyeShapes[] = {"Square", "Rounded", "Circle", "Circles"};
+//         int frameShape = static_cast<int>(style_.eyeframestyle);
+//         ImGui::SetNextItemWidth(120.f);
+//         if (ImGui::Combo("Eye frame", &frameShape, eyeShapes, IM_ARRAYSIZE(eyeShapes))) {
+//             style_.eyeframestyle = static_cast<qrstyle::QrStyle::eyeframe>(frameShape);
+//         }
+//         int ballShape = static_cast<int>(style_.eyeballstyle);
+//         ImGui::SetNextItemWidth(120.f);
+//         if (ImGui::Combo("Eye center", &ballShape, eyeShapes, IM_ARRAYSIZE(eyeShapes))) {
+//             style_.eyeballstyle = static_cast<qrstyle::QrStyle::eyeball>(ballShape);
+//         }
+
+//         ImGui::TableSetColumnIndex(1);
+//         ImGui::TextUnformatted("REGION COLORS");
+//         auto bodyColor = toColorEdit(colors_.body, colors_.bodyOpacity);
+//         ImGui::SetNextItemWidth(112.f);
+//         if (ImGui::ColorEdit4("##body-color", bodyColor.data(),
+//                               ImGuiColorEditFlags_DisplayHex | ImGuiColorEditFlags_NoLabel)) {
+//             colors_.body = fromColorEdit(bodyColor, colors_.bodyOpacity);
+//         }
+//         auto frameColor = toColorEdit(colors_.eyeframe, colors_.eyeframeOpacity);
+//         ImGui::SetNextItemWidth(112.f);
+//         if (ImGui::ColorEdit4("##eye-frame-color", frameColor.data(),
+//                               ImGuiColorEditFlags_DisplayHex | ImGuiColorEditFlags_NoLabel)) {
+//             colors_.eyeframe = fromColorEdit(frameColor, colors_.eyeframeOpacity);
+//         }
+//         auto ballColor = toColorEdit(colors_.eyeball, colors_.eyeballOpacity);
+//         ImGui::SetNextItemWidth(112.f);
+//         if (ImGui::ColorEdit4("##eye-center-color", ballColor.data(),
+//                               ImGuiColorEditFlags_DisplayHex | ImGuiColorEditFlags_NoLabel)) {
+//             colors_.eyeball = fromColorEdit(ballColor, colors_.eyeballOpacity);
+//         }
+//         auto backgroundColor = toColorEdit(colors_.background, colors_.backgroundOpacity);
+//         ImGui::SetNextItemWidth(112.f);
+//         if (ImGui::ColorEdit4("##background-color", backgroundColor.data(),
+//                               ImGuiColorEditFlags_DisplayHex | ImGuiColorEditFlags_NoLabel)) {
+//             colors_.background = fromColorEdit(backgroundColor, colors_.backgroundOpacity);
+//         }
+//         ImGui::SameLine();
+//         ImGui::TextUnformatted("background");
+//         ImGui::EndTable();
+//     }
+//     ImGui::Spacing();
+//     ImGui::Spacing();
+//     ImGui::Separator();
+//     ImGui::TextUnformatted("STATUS");
+//     ImGui::TextWrapped("%s", status_.c_str());
+// }
+
+void GuiApp::tabContent_Label()
+{
+    tabContent_Status();
+}
+
+void GuiApp::tabContent_Border()
+{
+    tabContent_Status();
+}
+
+
+void GuiApp::tabContent_Status()
+{
+    // --- BOX 2: Sekcja Statusu (opcjonalnie w osobnym, mniejszym boxie) ---
+    ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.16f, 0.16f, 0.18f, 1.0f));
+    ImGui::PushStyleColor(ImGuiCol_Border, ImVec4(1.0f, 1.0f, 1.0f, 1.0f));
+    ImGui::PushStyleVar(ImGuiStyleVar_ChildBorderSize, 1.0f);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(10.0f, 10.0f));
+
+    if (ImGui::BeginChild("##StatusContainer", ImVec2(0, 0), ImGuiChildFlags_AutoResizeY | ImGuiChildFlags_Border, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse))
+    {
+        ImGui::TextUnformatted("STATUS");
+        ImGui::Separator();
+        ImGui::TextWrapped("%s", status_.c_str());
+    }
+    ImGui::EndChild();
+    
+    ImGui::PopStyleVar(2);
+    ImGui::PopStyleColor(2);
 }
 
 void GuiApp::generate() {

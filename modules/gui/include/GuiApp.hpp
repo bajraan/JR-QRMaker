@@ -20,6 +20,12 @@ private:
     void rebuildPreview();
     void drawInterface();
 
+    void drawQrPreview();
+    void tabContent_Style();
+    void tabContent_Border();
+    void tabContent_Label();
+    void tabContent_Status();
+
     std::string text_;
     std::string outputText_{"qrcode.svg"};
     std::string status_{"Enter text or a link to create a QR code."};
