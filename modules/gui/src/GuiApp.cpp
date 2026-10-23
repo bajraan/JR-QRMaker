@@ -21,6 +21,7 @@ namespace {
 constexpr unsigned kWindowWidth = 1420;
 constexpr unsigned kWindowHeight = 800;
 constexpr std::size_t kInputCapacity = 4096;
+constexpr char kPaletteColorPayload[] = "JR_QRMAKER_COLOR";
 
 enum class QrPart { Body, EyeFrame, EyeBall };
 
@@ -470,6 +471,7 @@ void GuiApp::tabContent_Style()
             {
                 colors_.body = fromColorEdit(bodyColor, colors_.bodyOpacity);
             }
+            acceptPaletteColorDrop(colors_.body, "Body");
 
             ImGui::TableSetColumnIndex(3);
             ImGui::AlignTextToFramePadding();
@@ -501,6 +503,7 @@ void GuiApp::tabContent_Style()
                                    ImGuiColorEditFlags_DisplayHex | ImGuiColorEditFlags_NoLabel |  ImGuiColorEditFlags_NoBorder)){
                 colors_.eyeframe = fromColorEdit(frameColor, colors_.eyeframeOpacity);
             }
+            acceptPaletteColorDrop(colors_.eyeframe, "Eye Frame");
 
             ImGui::TableSetColumnIndex(3);
             ImGui::AlignTextToFramePadding();
@@ -531,6 +534,7 @@ void GuiApp::tabContent_Style()
             if (ImGui::ColorEdit4("##eye-center-color", ballColor.data(), ImGuiColorEditFlags_DisplayHex | ImGuiColorEditFlags_NoLabel | ImGuiColorEditFlags_NoBorder)) {
                 colors_.eyeball = fromColorEdit(ballColor, colors_.eyeballOpacity);
             }
+            acceptPaletteColorDrop(colors_.eyeball, "Eye Ball");
 
             ImGui::TableSetColumnIndex(3);
             ImGui::AlignTextToFramePadding();
@@ -558,6 +562,7 @@ void GuiApp::tabContent_Style()
             if (ImGui::ColorEdit4("##background-color", backgroundColor.data(), ImGuiColorEditFlags_DisplayHex | ImGuiColorEditFlags_NoLabel | ImGuiColorEditFlags_NoBorder)) {
                 colors_.background = fromColorEdit(backgroundColor, colors_.backgroundOpacity);
             }
+            acceptPaletteColorDrop(colors_.background, "Background");
 
             ImGui::TableSetColumnIndex(3);
             ImGui::AlignTextToFramePadding();
@@ -676,15 +681,10 @@ void GuiApp::loadColorPalettes() {
 void GuiApp::drawColorPaletteViewer() {
     const float remainingHeight = ImGui::GetContentRegionAvail().y;
     const float viewerHeight = std::max(90.f, std::min(400.f, remainingHeight - 76.f));
-    if (!ImGui::BeginChild("##PaletteViewer", ImVec2(0.f, viewerHeight), ImGuiChildFlags_Borders)) {
+    if (!ImGui::BeginChild("##PaletteViewer", ImVec2(0.f, viewerHeight))) {
         ImGui::EndChild();
         return;
     }
-
-    ImGui::TextUnformatted("COLOR PALETTE VIEWER");
-    ImGui::SameLine();
-    ImGui::TextDisabled("Click a palette to apply it");
-    ImGui::Separator();
 
     if (palettes_.empty()) {
         ImGui::TextWrapped("%s", paletteLoadMessage_.c_str());
@@ -692,17 +692,57 @@ void GuiApp::drawColorPaletteViewer() {
         for (std::size_t i = 0; i < palettes_.size(); ++i) {
             const ColorPalette& palette = palettes_[i];
             ImGui::PushID(static_cast<int>(i));
-            const bool selected = static_cast<int>(i) == selectedPalette_;
-            const bool clicked = ImGui::Selectable("##palette-card", selected, ImGuiSelectableFlags_None,
-                                                    ImVec2(0.f, 38.f));
+
+            // Całkowicie wyłączamy style podświetlenia po najechaniu i kliknięciu
+            ImGui::PushStyleColor(ImGuiCol_HeaderHovered, ImVec4(0.f, 0.f, 0.f, 0.f));
+            ImGui::PushStyleColor(ImGuiCol_HeaderActive, ImVec4(0.f, 0.f, 0.f, 0.f));
+            
+            // Przekazujemy 'false' jako stan zaznaczenia, żeby ImGui ignorowało ten stan wizualnie
+            const bool clicked = ImGui::Selectable("##palette-card", false, ImGuiSelectableFlags_None,
+                                                 ImVec2(0.f, 38.f));
+            
+            ImGui::PopStyleColor(2);
+
+            const bool hovered = ImGui::IsItemHovered();
             const ImVec2 itemMin = ImGui::GetItemRectMin();
             const ImVec2 itemMax = ImGui::GetItemRectMax();
-            ImDrawList* drawList = ImGui::GetWindowDrawList();
-            drawList->PushClipRect(itemMin, itemMax, true);
-            const float swatchStart = itemMin.x + 8.f;
+            const float swatchStart = itemMin.x + 0.f;
             const float swatchEnd = itemMax.x - 8.f;
             const float swatchArea = std::max(0.f, swatchEnd - swatchStart);
             const float swatchWidth = swatchArea / static_cast<float>(palette.colors.size());
+            const float colorPosition = std::clamp((ImGui::GetIO().MousePos.x - swatchStart) /
+                                                   std::max(1.f, swatchArea),
+                                                 0.f, 0.999999f);
+            const std::size_t pointerColorIndex = std::min(
+                static_cast<std::size_t>(colorPosition * palette.colors.size()), palette.colors.size() - 1);
+            if (hovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
+                dragCandidatePalette_ = static_cast<int>(i);
+                dragCandidateColorIndex_ = pointerColorIndex;
+            }
+
+            if (ImGui::BeginDragDropSource()) {
+                const std::size_t lockedColorIndex = dragCandidatePalette_ == static_cast<int>(i)
+                                                         ? std::min(dragCandidateColorIndex_, palette.colors.size() - 1)
+                                                         : pointerColorIndex;
+                const std::string& pointedColor = palette.colors[lockedColorIndex];
+                ImGui::SetDragDropPayload(kPaletteColorPayload, pointedColor.c_str(), pointedColor.size() + 1,
+                                          ImGuiCond_Once);
+                std::string colorHex = pointedColor;
+                if (const ImGuiPayload* payload = ImGui::GetDragDropPayload();
+                    payload != nullptr && payload->IsDataType(kPaletteColorPayload) && payload->Data != nullptr) {
+                    colorHex = static_cast<const char*>(payload->Data);
+                }
+                const auto color = toColorEdit(colorHex, 1.f);
+                ImGui::ColorButton("##drag-color-preview", ImVec4(color[0], color[1], color[2], 1.f),
+                                   ImGuiColorEditFlags_NoTooltip | ImGuiColorEditFlags_NoDragDrop,
+                                   ImVec2(34.f, 22.f));
+                ImGui::SameLine();
+                ImGui::Text("%s: #%s", palette.name.c_str(), colorHex.c_str());
+                ImGui::EndDragDropSource();
+            }
+
+            ImDrawList* drawList = ImGui::GetWindowDrawList();
+            drawList->PushClipRect(itemMin, itemMax, true);
             const float swatchHeight = 40.f;
             const float swatchY = itemMin.y + (itemMax.y - itemMin.y - swatchHeight) * 0.5f;
             for (std::size_t colorIndex = 0; colorIndex < palette.colors.size(); ++colorIndex) {
@@ -714,8 +754,18 @@ void GuiApp::drawColorPaletteViewer() {
                 drawList->AddRectFilled(min, max, color);
             }
             drawList->PopClipRect();
-            if (ImGui::IsItemHovered()) {
-                ImGui::SetTooltip("%s — %zu colors", palette.name.c_str(), palette.colors.size());
+
+            if (hovered && ImGui::GetDragDropPayload() == nullptr) {
+                const auto& hex = palette.colors[pointerColorIndex];
+                const auto color = toColorEdit(hex, 1.f);
+                ImGui::BeginTooltip();
+                ImGui::ColorButton("##picked-color-preview",
+                                   ImVec4(color[0], color[1], color[2], 1.f),
+                                   ImGuiColorEditFlags_NoTooltip | ImGuiColorEditFlags_NoDragDrop,
+                                   ImVec2(34.f, 22.f));
+                ImGui::SameLine();
+                ImGui::Text("%s: #%s", palette.name.c_str(), hex.c_str());
+                ImGui::EndTooltip();
             }
             if (clicked) {
                 applyColorPalette(i);
@@ -739,6 +789,22 @@ void GuiApp::applyColorPalette(std::size_t paletteIndex) {
     }
     selectedPalette_ = static_cast<int>(paletteIndex);
     status_ = "Applied color palette: " + palette.name;
+}
+
+void GuiApp::acceptPaletteColorDrop(std::string& regionColor, const char* regionName) {
+    if (!ImGui::BeginDragDropTarget()) {
+        return;
+    }
+
+    if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload(kPaletteColorPayload)) {
+        if (payload->Data != nullptr && payload->DataSize >= 7) {
+            const auto* hex = static_cast<const char*>(payload->Data);
+            regionColor.assign(hex, 6);
+            status_ = "Applied palette color to " + std::string(regionName) + ".";
+            selectedPalette_ = -1;
+        }
+    }
+    ImGui::EndDragDropTarget();
 }
 
 void GuiApp::tabContent_Label(){

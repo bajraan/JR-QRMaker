@@ -5,7 +5,7 @@
 * **Źródło:** Klient / Specyfikacja UX
 * **Priorytet:** Wysoki
 
-- [x] URQ-101: Podgląd palet kolorów
-* **Opis:** Użytkownik może przeglądać dostępne palety kolorów i zastosować wybraną paletę do kolorów elementów kodu QR.
+- [x] URQ-101: Podgląd i wybór kolorów z palet
+* **Opis:** Użytkownik może przeglądać dostępne palety kolorów, zastosować wybraną paletę do elementów kodu QR lub przeciągnąć pojedynczy kolor na pole koloru odpowiedniego regionu.
 * **Źródło:** Klient / Specyfikacja UX
 * **Priorytet:** Średni

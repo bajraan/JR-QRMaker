@@ -29,6 +29,7 @@ private:
     void drawColorPaletteViewer();
     void loadColorPalettes();
     void applyColorPalette(std::size_t paletteIndex);
+    void acceptPaletteColorDrop(std::string& regionColor, const char* regionName);
 
     struct ColorPalette {
         std::string name;
@@ -43,6 +44,8 @@ private:
     std::vector<ColorPalette> palettes_;
     std::string paletteLoadMessage_;
     int selectedPalette_{-1};
+    int dragCandidatePalette_{-1};
+    std::size_t dragCandidateColorIndex_{};
     std::optional<qrcodegen::QrCode> qr_;
     sf::RenderWindow window_;
 };
