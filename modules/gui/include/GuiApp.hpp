@@ -46,6 +46,9 @@ private:
     int selectedPalette_{-1};
     int dragCandidatePalette_{-1};
     std::size_t dragCandidateColorIndex_{};
+    int quietZoneModules_{qrstyle::QrStyle::kDefaultBorder};
+    float borderWidthModules_{0.f};
+    bool roundedBorderCorners_{true};
     std::optional<qrcodegen::QrCode> qr_;
     sf::RenderWindow window_;
 };

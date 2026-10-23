@@ -9,12 +9,14 @@
 #include <algorithm>
 #include <array>
 #include <chrono>
+#include <cmath>
 #include <cstdio>
 #include <cstring>
 #include <exception>
 #include <fstream>
 #include <filesystem>
 #include <sstream>
+#include <vector>
 
 namespace gui {
 namespace {
@@ -323,19 +325,81 @@ void GuiApp::drawQrPreview()
     }
     if (qr_) {
         const int count = qr_->getSize();
-        constexpr float quietZoneModules = static_cast<float>(qrstyle::QrStyle::kDefaultBorder);
-        const float totalModules = static_cast<float>(count) + quietZoneModules * 2.f;
+        const float quietZoneModules = static_cast<float>(quietZoneModules_);
+        const float totalModules = static_cast<float>(count) + quietZoneModules * 2.f + borderWidthModules_;
         const float module = std::max(1.f, std::min(size.x - 32.f, size.y - 32.f) / totalModules);
         const float qrSize = module * static_cast<float>(count);
         const float left = origin.x + (size.x - qrSize) * 0.5f;
         const float top = origin.y + (size.y - qrSize) * 0.5f;
         const float quietZone = quietZoneModules * module;
-        drawList->AddRectFilled(ImVec2(left - quietZone, top - quietZone),
-                                ImVec2(left + qrSize + quietZone, top + qrSize + quietZone),
-                                toImGuiColor(colors_.background, colors_.backgroundOpacity));
+        const ImU32 backgroundInk = toImGuiColor(colors_.background, colors_.backgroundOpacity);
+        const ImVec2 quietZoneMin(left - quietZone, top - quietZone);
+        const ImVec2 quietZoneMax(left + qrSize + quietZone, top + qrSize + quietZone);
+        if (roundedBorderCorners_ && borderWidthModules_ > 0.f) {
+            const float halfBorderWidth = borderWidthModules_ * module * 0.5f;
+            const float innerRadius = std::max(0.f, (quietZoneModules + 3.5f) * module - halfBorderWidth);
+            drawList->AddRectFilled(ImVec2(quietZoneMin.x + halfBorderWidth, quietZoneMin.y + halfBorderWidth),
+                                    ImVec2(quietZoneMax.x - halfBorderWidth, quietZoneMax.y - halfBorderWidth),
+                                    backgroundInk, innerRadius, ImDrawFlags_RoundCornersAll);
+        } else {
+            drawList->AddRectFilled(quietZoneMin, quietZoneMax, backgroundInk);
+        }
         const ImU32 bodyInk = toImGuiColor(colors_.body, colors_.bodyOpacity);
         const ImU32 frameInk = toImGuiColor(colors_.eyeframe, colors_.eyeframeOpacity);
         const ImU32 ballInk = toImGuiColor(colors_.eyeball, colors_.eyeballOpacity);
+        const auto drawBorder = [&]() {
+            if (borderWidthModules_ <= 0.f) {
+                return;
+            }
+            const float borderWidth = borderWidthModules_ * module;
+            const ImVec2 borderMin(left - quietZone, top - quietZone);
+            const ImVec2 borderMax(left + qrSize + quietZone, top + qrSize + quietZone);
+            if (!roundedBorderCorners_) {
+                drawList->AddRect(borderMin, borderMax, bodyInk, 0.f, ImDrawFlags_None, borderWidth);
+                return;
+            }
+
+            const float radius = (quietZoneModules + 3.5f) * module;
+            const float right = borderMax.x;
+            const float bottom = borderMax.y;
+            constexpr float pi = 3.14159265358979323846f;
+            std::vector<ImVec2> borderPath;
+            borderPath.reserve(4 * 18 + 4);
+            const auto appendPoint = [&borderPath](ImVec2 point) {
+                if (borderPath.empty()) {
+                    borderPath.push_back(point);
+                    return;
+                }
+                const ImVec2 last = borderPath.back();
+                const float dx = point.x - last.x;
+                const float dy = point.y - last.y;
+                if (dx * dx + dy * dy > 0.0001f) {
+                    borderPath.push_back(point);
+                }
+            };
+            const auto appendArc = [&appendPoint](ImVec2 center, float arcRadius,
+                                                  float startAngle, float endAngle) {
+                constexpr int segments = 32;
+                for (int i = 0; i <= segments; ++i) {
+                    const float t = static_cast<float>(i) / static_cast<float>(segments);
+                    const float angle = startAngle + (endAngle - startAngle) * t;
+                    appendPoint(ImVec2(center.x + std::cos(angle) * arcRadius,
+                                       center.y + std::sin(angle) * arcRadius));
+                }
+            };
+            appendPoint(ImVec2((borderMin.x + right) * 0.5f, borderMin.y));
+            appendPoint(ImVec2(right - radius, borderMin.y));
+            appendArc(ImVec2(right - radius, borderMin.y + radius), radius, -pi * 0.5f, 0.f);
+            appendPoint(ImVec2(right, bottom - radius));
+            appendArc(ImVec2(right - radius, bottom - radius), radius, 0.f, pi * 0.5f);
+            appendPoint(ImVec2(borderMin.x + radius, bottom));
+            appendArc(ImVec2(borderMin.x + radius, bottom - radius), radius, pi * 0.5f, pi);
+            appendPoint(ImVec2(borderMin.x, borderMin.y + radius));
+            appendArc(ImVec2(borderMin.x + radius, borderMin.y + radius), radius, pi, pi * 1.5f);
+            drawList->AddPolyline(borderPath.data(), static_cast<int>(borderPath.size()),
+                                  bodyInk, ImDrawFlags_Closed, borderWidth);
+        };
+        drawBorder();
         const auto drawTile = [&](int x, int y, auto shape, ImU32 ink) {
             const ImVec2 p0(left + x * module, top + y * module);
             const ImVec2 p1(p0.x + module + 0.15f, p0.y + module + 0.15f);
@@ -367,17 +431,6 @@ void GuiApp::drawQrPreview()
                 }
             }
         };
-        if (style_.bodystyle == qrstyle::QrStyle::body::ROUNDED) {
-            drawRoundedPart(QrPart::Body, bodyInk);
-        } else {
-            for (int y = 0; y < count; ++y) {
-                for (int x = 0; x < count; ++x) {
-                    if (qr_->getModule(x, y) && classifyModule(x, y, count) == QrPart::Body) {
-                        drawTile(x, y, style_.bodystyle, bodyInk);
-                    }
-                }
-            }
-        }
         if (style_.eyeframestyle == qrstyle::QrStyle::eyeframe::CIRCLE) {
             const ImVec2 centers[] = {
                                         {left + module * 3.5f, top + module * 3.5f},
@@ -412,6 +465,17 @@ void GuiApp::drawQrPreview()
                 for (int x = 0; x < count; ++x) {
                     if (qr_->getModule(x, y) && classifyModule(x, y, count) == QrPart::EyeBall) {
                         drawTile(x, y, style_.eyeballstyle, ballInk);
+                    }
+                }
+            }
+        }
+        if (style_.bodystyle == qrstyle::QrStyle::body::ROUNDED) {
+            drawRoundedPart(QrPart::Body, bodyInk);
+        } else {
+            for (int y = 0; y < count; ++y) {
+                for (int x = 0; x < count; ++x) {
+                    if (qr_->getModule(x, y) && classifyModule(x, y, count) == QrPart::Body) {
+                        drawTile(x, y, style_.bodystyle, bodyInk);
                     }
                 }
             }
@@ -812,6 +876,18 @@ void GuiApp::tabContent_Label(){
 }
 
 void GuiApp::tabContent_Border(){
+    ImGui::TextUnformatted("BORDER SETTINGS");
+    ImGui::Separator();
+    ImGui::SetNextItemWidth(-FLT_MIN);
+    ImGui::SliderInt("Quiet zone (modules)", &quietZoneModules_, 0, 32);
+    ImGui::TextDisabled("Recommended quiet zone: 4 modules.");
+    ImGui::SetNextItemWidth(-FLT_MIN);
+    if (ImGui::SliderFloat("Border width (modules)", &borderWidthModules_, 0.f, 2.f, "%.1f modules")) {
+        borderWidthModules_ = std::round(borderWidthModules_ * 10.f) / 10.f;
+    }
+    ImGui::TextDisabled("0 disables it; width is in modules and centered on the QR edge.");
+    ImGui::Checkbox("Rounded corners", &roundedBorderCorners_);
+    ImGui::TextDisabled("Radius follows the virtual eye centers (quiet zone + 3.5 modules).");
     tabContent_Status();
 }
 
@@ -851,7 +927,9 @@ void GuiApp::generate() {
         if (path.extension().empty()) {
             path += ".svg";
         }
-        qrstyle::QrStyle::writeFile(qr, path.string(), style_, colors_);
+        qrstyle::QrStyle::writeFile(qr, path.string(), style_, colors_, quietZoneModules_,
+                                    qrstyle::QrStyle::kDefaultCornerRadius, borderWidthModules_,
+                                    roundedBorderCorners_);
         qr_ = qr;
         status_ = "Saved SVG: " + std::filesystem::absolute(path).string();
     } catch (const std::exception& ex) {

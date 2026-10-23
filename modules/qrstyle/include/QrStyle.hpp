@@ -50,13 +50,17 @@ public:
                                    StyleShape shape = StyleShape(),
                                    StyleColor color = StyleColor(),
                                    int border = kDefaultBorder,
-                                   float cornerRadius = kDefaultCornerRadius);
+                                   float cornerRadius = kDefaultCornerRadius,
+                                   float borderWidth = 0.f,
+                                   bool roundedBorderCorners = false);
     static void writeFile(const qrcodegen::QrCode& qr,
                           const std::string& path,
                           StyleShape shape = StyleShape(),
                           StyleColor color = StyleColor(),
                           int border = kDefaultBorder,
-                          float cornerRadius = kDefaultCornerRadius);
+                          float cornerRadius = kDefaultCornerRadius,
+                          float borderWidth = 0.f,
+                          bool roundedBorderCorners = false);
 };
 
 }  // namespace qrstyle

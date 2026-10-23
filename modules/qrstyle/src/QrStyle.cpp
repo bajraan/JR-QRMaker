@@ -153,9 +153,13 @@ void appendEyeBall(std::string& svg, int size, int border, Shape shape, const st
 }  // namespace
 
 std::string QrStyle::toSvgString(const qrcodegen::QrCode& qr, StyleShape shape, StyleColor color,
-                                 int border, float cornerRadius) {
+                                 int border, float cornerRadius, float borderWidth,
+                                 bool roundedBorderCorners) {
     if (border < 0) {
         throw std::invalid_argument("SVG border must be non-negative");
+    }
+    if (!std::isfinite(borderWidth) || borderWidth < 0.f || borderWidth > 2.f) {
+        throw std::invalid_argument("SVG border width must be between 0 and 2 modules");
     }
     if (!std::isfinite(cornerRadius) || cornerRadius < 0.f || cornerRadius > 0.5f) {
         throw std::invalid_argument("QR corner radius must be between 0 and 0.5 modules");
@@ -170,6 +174,7 @@ std::string QrStyle::toSvgString(const qrcodegen::QrCode& qr, StyleShape shape, 
 
     const int size = qr.getSize();
     const int dimension = size + border * 2;
+    const float viewDimension = static_cast<float>(dimension) + borderWidth;
     const std::string background = normalizeColor(color.background);
     const std::string bodyColor = normalizeColor(color.body);
     const std::string eyeBallColor = normalizeColor(color.eyeball);
@@ -179,10 +184,63 @@ std::string QrStyle::toSvgString(const qrcodegen::QrCode& qr, StyleShape shape, 
     svg.reserve(static_cast<std::size_t>(size * size * 100));
     svg += "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n";
     svg += "<svg xmlns=\"http://www.w3.org/2000/svg\" version=\"1.1\" viewBox=\"0 0 ";
-    svg += std::to_string(dimension) + " " + std::to_string(dimension) + "\">\n";
-    svg += "<rect width=\"100%\" height=\"100%\" fill=\"" + background + "\" fill-opacity=\"" +
-           std::to_string(color.backgroundOpacity) + "\"/>\n";
+    svg += std::to_string(viewDimension) + " " + std::to_string(viewDimension) + "\">\n";
+    if (roundedBorderCorners && borderWidth > 0.f) {
+        const float halfBorderWidth = borderWidth * 0.5f;
+        const float innerDimension = static_cast<float>(dimension) - borderWidth;
+        const float innerRadius = std::max(0.f, static_cast<float>(border) + 3.5f - halfBorderWidth);
+        svg += "<rect x=\"" + std::to_string(borderWidth) + "\" y=\"" +
+               std::to_string(borderWidth) + "\" width=\"" + std::to_string(innerDimension) +
+               "\" height=\"" + std::to_string(innerDimension) + "\" rx=\"" +
+               std::to_string(innerRadius) + "\" ry=\"" + std::to_string(innerRadius) +
+               "\" fill=\"" + background + "\" fill-opacity=\"" +
+               std::to_string(color.backgroundOpacity) + "\"/>\n";
+    } else {
+        svg += "<rect width=\"100%\" height=\"100%\" fill=\"" + background + "\" fill-opacity=\"" +
+               std::to_string(color.backgroundOpacity) + "\"/>\n";
+    }
 
+    if (borderWidth > 0.f) {
+        const float offset = borderWidth * 0.5f;
+        const std::string stroke = " stroke=\"" + bodyColor + "\" stroke-linejoin=\"round\" stroke-opacity=\"" +
+                                   std::to_string(color.bodyOpacity) + "\" stroke-width=\"" +
+                                   std::to_string(borderWidth) + "\"/>\n";
+        if (roundedBorderCorners) {
+            const float radius = static_cast<float>(border) + 3.5f;
+            const float right = offset + static_cast<float>(dimension);
+            const float bottom = right;
+            const float topMiddle = offset + static_cast<float>(dimension) * 0.5f;
+            svg += "<path d=\"M " + std::to_string(topMiddle) + " " + std::to_string(offset) +
+                   " H " + std::to_string(right - radius) + " A " + std::to_string(radius) + " " +
+                   std::to_string(radius) + " 0 0 1 " + std::to_string(right) + " " +
+                   std::to_string(offset + radius) + " V " + std::to_string(bottom - radius) +
+                   " A " + std::to_string(radius) + " " + std::to_string(radius) + " 0 0 1 " +
+                   std::to_string(right - radius) + " " + std::to_string(bottom) + " H " +
+                   std::to_string(offset + radius) + " A " + std::to_string(radius) + " " +
+                   std::to_string(radius) + " 0 0 1 " + std::to_string(offset) + " " +
+                   std::to_string(bottom - radius) + " V " + std::to_string(offset + radius) +
+                   " A " + std::to_string(radius) + " " + std::to_string(radius) + " 0 0 1 " +
+                   std::to_string(offset + radius) + " " + std::to_string(offset) + " Z\" fill=\"none\"" +
+                   stroke;
+        } else {
+            svg += "<rect x=\"" + std::to_string(offset) + "\" y=\"" + std::to_string(offset) +
+                   "\" width=\"" + std::to_string(dimension) + "\" height=\"" +
+                   std::to_string(dimension) + "\" fill=\"none\"" + stroke;
+        }
+    }
+
+    svg += "<g transform=\"translate(" + std::to_string(borderWidth * 0.5f) + " " +
+           std::to_string(borderWidth * 0.5f) + ")\">\n";
+    if (shape.eyeframestyle == eyeframe::ROUNDED) {
+        appendRoundedPart(svg, qr, border, eyeFrameColor, color.eyeframeOpacity, Part::EyeFrame);
+    } else {
+        appendEyeFrame(svg, size, border, shape.eyeframestyle, eyeFrameColor, cornerRadius, color.eyeframeOpacity);
+    }
+    if (shape.eyeballstyle == eyeball::ROUNDED) {
+        appendRoundedPart(svg, qr, border, eyeBallColor, color.eyeballOpacity, Part::EyeBall);
+    } else {
+        appendEyeBall(svg, size, border, shape.eyeballstyle, eyeBallColor, cornerRadius, color.eyeballOpacity);
+    }
     if (shape.bodystyle == body::ROUNDED) {
         appendRoundedPart(svg, qr, border, bodyColor, color.bodyOpacity, Part::Body);
     } else {
@@ -194,27 +252,20 @@ std::string QrStyle::toSvgString(const qrcodegen::QrCode& qr, StyleShape shape, 
             }
         }
     }
-    if (shape.eyeframestyle == eyeframe::ROUNDED) {
-        appendRoundedPart(svg, qr, border, eyeFrameColor, color.eyeframeOpacity, Part::EyeFrame);
-    } else {
-        appendEyeFrame(svg, size, border, shape.eyeframestyle, eyeFrameColor, cornerRadius, color.eyeframeOpacity);
-    }
-    if (shape.eyeballstyle == eyeball::ROUNDED) {
-        appendRoundedPart(svg, qr, border, eyeBallColor, color.eyeballOpacity, Part::EyeBall);
-    } else {
-        appendEyeBall(svg, size, border, shape.eyeballstyle, eyeBallColor, cornerRadius, color.eyeballOpacity);
-    }
+    svg += "</g>\n";
     svg += "</svg>\n";
     return svg;
 }
 
 void QrStyle::writeFile(const qrcodegen::QrCode& qr, const std::string& path, StyleShape shape,
-                        StyleColor color, int border, float cornerRadius) {
+                        StyleColor color, int border, float cornerRadius, float borderWidth,
+                        bool roundedBorderCorners) {
     std::ofstream out(path, std::ios::binary);
     if (!out) {
         throw std::runtime_error("Failed to open output file: " + path);
     }
-    out << toSvgString(qr, shape, std::move(color), border, cornerRadius);
+    out << toSvgString(qr, shape, std::move(color), border, cornerRadius, borderWidth,
+                       roundedBorderCorners);
     if (!out) {
         throw std::runtime_error("Failed to write output file: " + path);
     }
