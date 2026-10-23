@@ -164,7 +164,7 @@ std::string QrStyle::toSvgString(const qrcodegen::QrCode& qr, StyleShape shape, 
     if (!std::isfinite(cornerRadius) || cornerRadius < 0.f || cornerRadius > 0.5f) {
         throw std::invalid_argument("QR corner radius must be between 0 and 0.5 modules");
     }
-    const std::array<float, 4> opacities{{color.backgroundOpacity, color.bodyOpacity,
+    const std::array<float, 5> opacities{{color.backgroundOpacity, color.borderOpacity, color.bodyOpacity,
                                           color.eyeballOpacity, color.eyeframeOpacity}};
     for (const float opacity : opacities) {
         if (!std::isfinite(opacity) || opacity < 0.f || opacity > 1.f) {
@@ -176,6 +176,7 @@ std::string QrStyle::toSvgString(const qrcodegen::QrCode& qr, StyleShape shape, 
     const int dimension = size + border * 2;
     const float viewDimension = static_cast<float>(dimension) + borderWidth;
     const std::string background = normalizeColor(color.background);
+    const std::string borderColor = normalizeColor(color.border);
     const std::string bodyColor = normalizeColor(color.body);
     const std::string eyeBallColor = normalizeColor(color.eyeball);
     const std::string eyeFrameColor = normalizeColor(color.eyeframe);
@@ -202,8 +203,8 @@ std::string QrStyle::toSvgString(const qrcodegen::QrCode& qr, StyleShape shape, 
 
     if (borderWidth > 0.f) {
         const float offset = borderWidth * 0.5f;
-        const std::string stroke = " stroke=\"" + bodyColor + "\" stroke-linejoin=\"round\" stroke-opacity=\"" +
-                                   std::to_string(color.bodyOpacity) + "\" stroke-width=\"" +
+        const std::string stroke = " stroke=\"" + borderColor + "\" stroke-linejoin=\"round\" stroke-opacity=\"" +
+                                   std::to_string(color.borderOpacity) + "\" stroke-width=\"" +
                                    std::to_string(borderWidth) + "\"/>\n";
         if (roundedBorderCorners) {
             const float radius = static_cast<float>(border) + 3.5f;

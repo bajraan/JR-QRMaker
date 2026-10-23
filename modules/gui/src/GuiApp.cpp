@@ -344,6 +344,7 @@ void GuiApp::drawQrPreview()
         } else {
             drawList->AddRectFilled(quietZoneMin, quietZoneMax, backgroundInk);
         }
+        const ImU32 borderInk = toImGuiColor(colors_.border, colors_.borderOpacity);
         const ImU32 bodyInk = toImGuiColor(colors_.body, colors_.bodyOpacity);
         const ImU32 frameInk = toImGuiColor(colors_.eyeframe, colors_.eyeframeOpacity);
         const ImU32 ballInk = toImGuiColor(colors_.eyeball, colors_.eyeballOpacity);
@@ -355,7 +356,7 @@ void GuiApp::drawQrPreview()
             const ImVec2 borderMin(left - quietZone, top - quietZone);
             const ImVec2 borderMax(left + qrSize + quietZone, top + qrSize + quietZone);
             if (!roundedBorderCorners_) {
-                drawList->AddRect(borderMin, borderMax, bodyInk, 0.f, ImDrawFlags_None, borderWidth);
+                drawList->AddRect(borderMin, borderMax, borderInk, 0.f, ImDrawFlags_None, borderWidth);
                 return;
             }
 
@@ -397,7 +398,7 @@ void GuiApp::drawQrPreview()
             appendPoint(ImVec2(borderMin.x, borderMin.y + radius));
             appendArc(ImVec2(borderMin.x + radius, borderMin.y + radius), radius, pi, pi * 1.5f);
             drawList->AddPolyline(borderPath.data(), static_cast<int>(borderPath.size()),
-                                  bodyInk, ImDrawFlags_Closed, borderWidth);
+                                  borderInk, ImDrawFlags_Closed, borderWidth);
         };
         drawBorder();
         const auto drawTile = [&](int x, int y, auto shape, ImU32 ink) {
@@ -635,6 +636,32 @@ void GuiApp::tabContent_Style()
             {
             }
 
+            // --- Row 5: Border ---
+            ImGui::TableNextRow();
+            ImGui::TableSetColumnIndex(0);
+            ImGui::AlignTextToFramePadding();
+            ImGui::TextDisabled(" N/A ");
+
+            ImGui::TableSetColumnIndex(1);
+            ImGui::AlignTextToFramePadding();
+            ImGui::Text("Border");
+
+            ImGui::TableSetColumnIndex(2);
+            ImGui::AlignTextToFramePadding();
+            auto borderColor = toColorEdit(colors_.border, colors_.borderOpacity);
+            ImGui::SetNextItemWidth(112.f);
+            if (ImGui::ColorEdit4("##border-color", borderColor.data(),
+                                  ImGuiColorEditFlags_DisplayHex | ImGuiColorEditFlags_NoLabel |
+                                      ImGuiColorEditFlags_NoBorder)) {
+                colors_.border = fromColorEdit(borderColor, colors_.borderOpacity);
+            }
+            acceptPaletteColorDrop(colors_.border, "Border");
+
+            ImGui::TableSetColumnIndex(3);
+            ImGui::AlignTextToFramePadding();
+            ImGui::SetNextItemWidth(-FLT_MIN);
+            ImGui::SliderFloat("##border-opacity", &colors_.borderOpacity, 0.0f, 1.0f, "Opacity: %.2f");
+
             ImGui::EndTable();
         }
     }
@@ -846,6 +873,7 @@ void GuiApp::applyColorPalette(std::size_t paletteIndex) {
     }
     const ColorPalette& palette = palettes_[paletteIndex];
     colors_.body = palette.colors[0];
+    colors_.border = palette.colors[0];
     colors_.eyeframe = palette.colors[std::min<std::size_t>(1, palette.colors.size() - 1)];
     colors_.eyeball = palette.colors[std::min<std::size_t>(2, palette.colors.size() - 1)];
     if (palette.colors.size() >= 4) {

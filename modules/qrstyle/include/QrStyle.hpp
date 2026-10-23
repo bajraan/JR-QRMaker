@@ -25,10 +25,12 @@ public:
 
     struct StyleColor {
         std::string background;
+        std::string border;
         std::string body;
         std::string eyeball;
         std::string eyeframe;
         float backgroundOpacity;
+        float borderOpacity;
         float bodyOpacity;
         float eyeballOpacity;
         float eyeframeOpacity;
@@ -36,10 +38,11 @@ public:
         StyleColor(std::string backgroundColor = "FFFFFF", std::string bodyColor = "D35400",
                    std::string eyeBallColor = "D35400", std::string eyeFrameColor = "D35400",
                    float backgroundAlpha = 1.f, float bodyAlpha = 1.f, float eyeBallAlpha = 1.f,
-                   float eyeFrameAlpha = 1.f)
-            : background(std::move(backgroundColor)), body(std::move(bodyColor)),
+                   float eyeFrameAlpha = 1.f, std::string borderColor = "D35400",
+                   float borderAlpha = 1.f)
+            : background(std::move(backgroundColor)), border(std::move(borderColor)), body(std::move(bodyColor)),
               eyeball(std::move(eyeBallColor)), eyeframe(std::move(eyeFrameColor)),
-              backgroundOpacity(backgroundAlpha), bodyOpacity(bodyAlpha),
+              backgroundOpacity(backgroundAlpha), borderOpacity(borderAlpha), bodyOpacity(bodyAlpha),
               eyeballOpacity(eyeBallAlpha), eyeframeOpacity(eyeFrameAlpha) {}
     };
 
